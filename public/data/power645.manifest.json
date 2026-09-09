@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "product": "mega645",
+  "recordCount": 1362,
+  "firstDrawDate": "2017-10-25",
+  "latestDrawDate": "2026-09-06",
+  "lastAttemptedSync": "2026-09-09T18:31:31.673Z",
+  "lastSuccessfulSync": "2026-09-09T18:31:31.673Z",
+  "source": {
+    "id": "vietlott-data",
+    "url": "https://raw.githubusercontent.com/vietvudanh/vietlott-data/main/data/power645.jsonl",
+    "license": "MIT"
+  },
+  "sourceEtag": "W/\"7edd34eecb9801b9c6995c0219cc2d4a7970381cb2cfb226570f70543ce9b35c\"",
+  "datasetSha256": "6410e30d0c4224fb2f319a765ec38429f8e476d8217765edfe2cba3ac7b23c38",
+  "validation": {
+    "valid": true,
+    "duplicates": 0,
+    "conflicts": 0,
+    "rejected": 0
+  }
+}

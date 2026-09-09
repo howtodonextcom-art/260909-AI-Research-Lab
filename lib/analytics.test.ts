@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  PROTOCOL_VERSION,
   calculateFrequency,
   createStrategyPick,
   filterByWindow,
   parseDraws,
   runTemporalBacktestReport,
   runWalkForwardBacktest,
+  selectCandidate,
   type DrawRecord,
+  type PhaseBacktestResult,
 } from "./analytics.ts";
 import { validateNumbers } from "./mega645.ts";
 
@@ -52,9 +55,9 @@ test("walk-forward không nhìn trước và tạo đủ kết quả", () => {
   assert.deepEqual(results, runWalkForwardBacktest(draws, 90));
 });
 
-test("pipeline train-validation-test chia theo thời gian và hiệu chỉnh nhiều chiến lược", () => {
+test("pipeline development-validation-test chia theo thời gian và hiệu chỉnh nhiều chiến lược", () => {
   const report = runTemporalBacktestReport(draws, 90);
-  assert.deepEqual(report.phases.map((phase) => phase.id), ["TRAIN", "VALIDATION", "TEST"]);
+  assert.deepEqual(report.phases.map((phase) => phase.id), ["DEVELOPMENT", "VALIDATION", "TEST"]);
   assert.deepEqual(report.phases.map((phase) => phase.trials), [15, 7, 8]);
   assert.equal(report.results.length, 12);
   assert.equal(report.reliability.length, 3);
@@ -74,4 +77,71 @@ test("validation không thay đổi khi sửa kỳ holdout tương lai", () => {
   const baselineValidation = baseline.results.filter((result) => result.phase === "VALIDATION");
   const changedValidation = changed.results.filter((result) => result.phase === "VALIDATION");
   assert.deepEqual(changedValidation, baselineValidation);
+});
+
+// --- B2: chống rò rỉ holdout vào việc chọn ứng viên ---
+
+test("thay đổi toàn bộ tập test không làm đổi ứng viên được chọn", () => {
+  const baseline = runTemporalBacktestReport(draws, 90);
+
+  // Ghi đè MỌI kỳ thuộc phần test bằng kết quả khác hẳn.
+  const testPhase = baseline.phases.find((phase) => phase.id === "TEST")!;
+  const mutated = draws.map((draw) =>
+    draw.date >= testPhase.startDate
+      ? { ...draw, result: [40, 41, 42, 43, 44, 45] }
+      : { ...draw, result: [...draw.result] },
+  );
+  const changed = runTemporalBacktestReport(mutated, 90);
+
+  assert.deepEqual(changed.candidate, baseline.candidate, "ứng viên không được phụ thuộc tập test");
+  assert.deepEqual(
+    changed.results.filter((r) => r.phase !== "TEST"),
+    baseline.results.filter((r) => r.phase !== "TEST"),
+    "kết quả development và validation không được đổi",
+  );
+  assert.notDeepEqual(
+    changed.results.filter((r) => r.phase === "TEST"),
+    baseline.results.filter((r) => r.phase === "TEST"),
+    "chỉ đánh giá trên tập test được phép thay đổi",
+  );
+});
+
+test("ứng viên chỉ đến từ validation và phải vượt ngưỡng alpha", () => {
+  const make = (strategy: PhaseBacktestResult["strategy"], edge: number, adjusted: number) =>
+    ({ strategy, edgeVsRandom: edge, adjustedPValue: adjusted, phase: "VALIDATION" } as PhaseBacktestResult);
+
+  assert.equal(selectCandidate([make("HOT", 0.05, 0.20)], 0.05), null, "p-value quá cao thì không chọn");
+  assert.equal(selectCandidate([make("HOT", -0.01, 0.001)], 0.05), null, "edge âm thì không chọn");
+  assert.equal(selectCandidate([], 0.05), null, "không có gì thì không chọn");
+
+  const picked = selectCandidate([make("HOT", 0.05, 0.04), make("COLD", 0.09, 0.01)], 0.05);
+  assert.equal(picked?.strategy, "COLD", "chọn adjusted p-value nhỏ nhất");
+  assert.equal(picked?.protocolVersion, PROTOCOL_VERSION, "ứng viên phải ghi lại phiên bản protocol");
+});
+
+test("không chiến lược nào được gắn nhãn xác nhận trên dữ liệu tổng hợp", () => {
+  const report = runTemporalBacktestReport(draws, 90);
+  for (const row of report.reliability) {
+    assert.ok(["NO_EDGE", "VALIDATION_ONLY", "HOLDOUT_SIGNAL"].includes(row.verdict));
+  }
+});
+
+// --- B3: trạng thái VERIFIED không còn tồn tại ---
+
+test("kết quả backtest báo cáo cổng sàng lọc thay vì verdict không thể đạt", () => {
+  const results = runWalkForwardBacktest(draws, 90);
+  for (const result of results) {
+    assert.ok(!("verdict" in result), "verdict tri-state phải bị loại bỏ");
+    assert.equal(
+      result.gates.passedCount,
+      Number(result.gates.significant) +
+        Number(result.gates.stableAcrossHalves) +
+        Number(result.gates.outperformsRandomPayout),
+      "passedCount phải bằng tổng ba cổng",
+    );
+    assert.ok(result.gates.passedCount >= 0 && result.gates.passedCount <= 3);
+  }
+
+  const control = results.find((result) => result.strategy === "RANDOM")!;
+  assert.equal(control.gates.passedCount, 0, "mốc đối chứng không tự vượt cổng của chính nó");
 });

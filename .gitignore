@@ -46,3 +46,6 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Browser-automation artifacts from local verification runs
+/.playwright-mcp/

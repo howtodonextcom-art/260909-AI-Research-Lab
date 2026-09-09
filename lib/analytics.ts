@@ -9,7 +9,22 @@ export type DrawRecord = {
 
 export type WindowId = "30D" | "90D" | "365D" | "ALL";
 export type StrategyId = "RANDOM" | "HOT" | "COLD" | "BALANCED";
-export type EvaluationPhaseId = "TRAIN" | "VALIDATION" | "TEST";
+
+/**
+ * Phase names describe a *retrospective* temporal split of an existing file.
+ * "DEVELOPMENT" rather than "TRAIN" because nothing is fitted on it: the
+ * strategies are fixed rules, and this segment only shows how they behaved
+ * while the rules were being written.
+ *
+ * The TEST segment is a holdout in the mechanical sense — the candidate is
+ * chosen without it — but it is not a holdout in the strong sense, because a
+ * human could already have seen these draws. Only draws that arrive after the
+ * protocol is locked are prospective evidence; see `PROTOCOL_VERSION`.
+ */
+export type EvaluationPhaseId = "DEVELOPMENT" | "VALIDATION" | "TEST";
+
+/** Bumped whenever the strategy set or selection rule changes. */
+export const PROTOCOL_VERSION = "2026-09-10.1";
 
 export const STRATEGIES: Record<StrategyId, { name: string; description: string }> = {
   RANDOM: { name: "Ngẫu nhiên đối chứng", description: "Trung bình 32 vé ngẫu nhiên có seed ở mỗi kỳ để giảm nhiễu của một chuỗi đơn lẻ." },
@@ -26,6 +41,25 @@ export type FrequencyRow = {
   gap: number;
 };
 
+/**
+ * The three screening gates, reported individually.
+ *
+ * These replace an earlier tri-state verdict whose "VERIFIED" value was
+ * unreachable, which made the UI counter that consumed it permanently read
+ * zero. Passing all three is a reason to keep looking, never a confirmation:
+ * they are computed in-sample over the whole file.
+ */
+export type BacktestGates = {
+  significant: boolean;
+  stableAcrossHalves: boolean;
+  outperformsRandomPayout: boolean;
+  passedCount: number;
+};
+
+/**
+ * Whole-history summary. Descriptive only: it is computed over every draw,
+ * including the holdout, so it must never drive a recommendation.
+ */
 export type BacktestResult = {
   strategy: StrategyId;
   trials: number;
@@ -38,7 +72,7 @@ export type BacktestResult = {
   zScoreVsRandom: number;
   firstHalfEdge: number;
   secondHalfEdge: number;
-  verdict: "NO_EDGE" | "PROMISING" | "VERIFIED";
+  gates: BacktestGates;
 };
 
 export type EvaluationPhase = {
@@ -70,11 +104,25 @@ export type StrategyReliability = {
   verdict: "NO_EDGE" | "VALIDATION_ONLY" | "HOLDOUT_SIGNAL";
 };
 
+/**
+ * A candidate nominated from the validation segment alone. Test-segment
+ * numbers never influence this choice; they only confirm or refute it.
+ */
+export type SelectedCandidate = {
+  strategy: Exclude<StrategyId, "RANDOM">;
+  validationEdge: number;
+  validationAdjustedPValue: number;
+  protocolVersion: string;
+};
+
 export type TemporalBacktestReport = {
   lookback: number;
   alpha: number;
   multipleTestingMethod: "Holm-Bonferroni";
   selectionRule: string;
+  protocolVersion: string;
+  /** Null when validation produced no strategy that clears the bar. */
+  candidate: SelectedCandidate | null;
   phases: EvaluationPhase[];
   results: PhaseBacktestResult[];
   reliability: StrategyReliability[];
@@ -279,8 +327,13 @@ function summarizeSeries(series: WalkForwardSeries, strategy: StrategyId, start:
   const roi = cost === 0 ? 0 : ((payout - cost) / cost) * 100;
   const edgeVsRandom = mean(values) - randomAverage;
   const randomPayout = series.payouts.RANDOM.slice(start, end).reduce((sum, value) => sum + value, 0);
-  const verified = strategy !== "RANDOM" && zScore >= 1.96 && firstHalfEdge > 0 && secondHalfEdge > 0 && payout > randomPayout;
-  const promising = strategy !== "RANDOM" && edgeVsRandom > 0 && !verified;
+
+  const isControl = strategy === "RANDOM";
+  const significant = !isControl && zScore >= 1.96;
+  const stableAcrossHalves = !isControl && firstHalfEdge > 0 && secondHalfEdge > 0;
+  // High variance by construction: the strategy side is a single ticket while
+  // the control is an average of 32, and one 5-match dominates either total.
+  const outperformsRandomPayout = !isControl && payout > randomPayout;
 
   return {
     strategy,
@@ -294,7 +347,12 @@ function summarizeSeries(series: WalkForwardSeries, strategy: StrategyId, start:
     zScoreVsRandom: zScore,
     firstHalfEdge,
     secondHalfEdge,
-    verdict: verified || promising ? "PROMISING" : "NO_EDGE",
+    gates: {
+      significant,
+      stableAcrossHalves,
+      outperformsRandomPayout,
+      passedCount: Number(significant) + Number(stableAcrossHalves) + Number(outperformsRandomPayout),
+    },
   };
 }
 
@@ -322,9 +380,9 @@ function splitEvaluationPhases(series: WalkForwardSeries): Array<EvaluationPhase
   const validationEnd = Math.max(trainEnd + 1, Math.floor(trialCount * 0.75));
   const boundedValidationEnd = Math.min(validationEnd, trialCount - 1);
   const definitions: Array<{ id: EvaluationPhaseId; label: string; start: number; end: number }> = [
-    { id: "TRAIN", label: "Train", start: 0, end: trainEnd },
+    { id: "DEVELOPMENT", label: "Development", start: 0, end: trainEnd },
     { id: "VALIDATION", label: "Validation", start: trainEnd, end: boundedValidationEnd },
-    { id: "TEST", label: "Test holdout", start: boundedValidationEnd, end: trialCount },
+    { id: "TEST", label: "Test (retrospective)", start: boundedValidationEnd, end: trialCount },
   ];
   return definitions
     .filter((phase) => phase.end > phase.start)
@@ -343,6 +401,35 @@ export function runWalkForwardBacktest(draws: DrawRecord[], lookback = 90): Back
   return strategyIds.map((strategy) => summarizeSeries(series, strategy, 0, series.dates.length));
 }
 
+export const SELECTION_RULE =
+  "Ứng viên chỉ được chọn từ validation: cần edge dương VÀ adjusted p-value ≤ alpha. " +
+  "Tập test chỉ dùng để xác nhận hoặc bác bỏ, không bao giờ để chọn.";
+
+/**
+ * Nominates at most one candidate using validation numbers only.
+ *
+ * Exported and pure so the selection bar can be tested directly instead of
+ * being inferred from an end-to-end run.
+ */
+export function selectCandidate(
+  validationResults: PhaseBacktestResult[],
+  alpha = 0.05,
+): SelectedCandidate | null {
+  const eligible = validationResults
+    .filter((result) => result.strategy !== "RANDOM")
+    .filter((result) => result.edgeVsRandom > 0 && (result.adjustedPValue ?? 1) <= alpha)
+    .sort((a, b) => (a.adjustedPValue ?? 1) - (b.adjustedPValue ?? 1) || b.edgeVsRandom - a.edgeVsRandom);
+
+  const best = eligible[0];
+  if (!best) return null;
+  return {
+    strategy: best.strategy as Exclude<StrategyId, "RANDOM">,
+    validationEdge: best.edgeVsRandom,
+    validationAdjustedPValue: best.adjustedPValue ?? 1,
+    protocolVersion: PROTOCOL_VERSION,
+  };
+}
+
 export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, alpha = 0.05): TemporalBacktestReport {
   const series = buildWalkForwardSeries(draws, lookback);
   if (!series) {
@@ -350,7 +437,9 @@ export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, al
       lookback,
       alpha,
       multipleTestingMethod: "Holm-Bonferroni",
-      selectionRule: "Chọn chiến lược có adjusted p-value nhỏ nhất trên validation nếu edge dương.",
+      selectionRule: SELECTION_RULE,
+      protocolVersion: PROTOCOL_VERSION,
+      candidate: null,
       phases: [],
       results: [],
       reliability: [],
@@ -376,14 +465,12 @@ export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, al
   }
 
   const validationResults = results.filter((result) => result.phase === "VALIDATION" && result.strategy !== "RANDOM");
-  const selected = validationResults
-    .filter((result) => result.edgeVsRandom > 0)
-    .sort((a, b) => (a.adjustedPValue ?? 1) - (b.adjustedPValue ?? 1) || b.edgeVsRandom - a.edgeVsRandom)[0];
+  const candidate = selectCandidate(validationResults, alpha);
 
   const reliability = (strategyIds.filter((strategy) => strategy !== "RANDOM") as Array<Exclude<StrategyId, "RANDOM">>).map((strategy) => {
     const validation = results.find((result) => result.phase === "VALIDATION" && result.strategy === strategy);
     const test = results.find((result) => result.phase === "TEST" && result.strategy === strategy);
-    const selectedOnValidation = selected?.strategy === strategy;
+    const selectedOnValidation = candidate?.strategy === strategy;
     const holdoutSignal = selectedOnValidation && Boolean(test?.significantAfterCorrection) && (test?.ci95Low ?? 0) > 0;
     const verdict: StrategyReliability["verdict"] = holdoutSignal ? "HOLDOUT_SIGNAL" : selectedOnValidation ? "VALIDATION_ONLY" : "NO_EDGE";
     return {
@@ -403,7 +490,9 @@ export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, al
     lookback,
     alpha,
     multipleTestingMethod: "Holm-Bonferroni",
-    selectionRule: "Chọn chiến lược có adjusted p-value nhỏ nhất trên validation nếu edge dương; kiểm tra lại trên test holdout.",
+    selectionRule: SELECTION_RULE,
+    protocolVersion: PROTOCOL_VERSION,
+    candidate,
     phases: phasesWithBounds.map((phase) => ({
       id: phase.id,
       label: phase.label,

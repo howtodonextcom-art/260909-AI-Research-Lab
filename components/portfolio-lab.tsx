@@ -23,7 +23,20 @@ export function PortfolioLab() {
 
   const copyTickets = async () => {
     const text = portfolio.map((ticket, index) => `${String(index + 1).padStart(2, "0")}: ${ticket.map(formatBall).join(" ")}`).join("\n");
-    await navigator.clipboard?.writeText(text);
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      // Clipboard permissions can be denied in local previews; the portfolio remains usable on screen.
+    }
+  };
+
+  const refreshSeed = () => {
+    const cryptoSource = (globalThis as typeof globalThis & { crypto?: Crypto }).crypto;
+    if (typeof cryptoSource?.getRandomValues === "function") {
+      setSeed(cryptoSource.getRandomValues(new Uint32Array(1))[0]);
+      return;
+    }
+    setSeed((current) => current + 1);
   };
 
   return <section className="portfolio-lab">
@@ -33,9 +46,9 @@ export function PortfolioLab() {
     </div>
 
     <section className="analysis-card budget-card">
-      <div className="section-heading"><div><p className="eyebrow">Ngân sách một kỳ</p><h2>{ticketCount} vé · {formatVnd(odds.cost)}</h2></div><Button variant="outline" onClick={() => setSeed(crypto.getRandomValues(new Uint32Array(1))[0])}><RefreshCw /> Bộ khác</Button></div>
+      <div className="section-heading"><div><p className="eyebrow">Ngân sách một kỳ</p><h2>{ticketCount} vé · {formatVnd(odds.cost)}</h2></div><Button variant="outline" onClick={refreshSeed}><RefreshCw /> Bộ khác</Button></div>
       <label htmlFor="ticket-count">Số vé: {ticketCount}</label>
-      <Slider id="ticket-count" min={1} max={30} step={1} value={[ticketCount]} onValueChange={value => setTicketCount(value[0])} aria-label="Số vé trong portfolio" />
+      <Slider id="ticket-count" min={1} max={30} step={1} value={[ticketCount]} onValueChange={value => setTicketCount(value[0] ?? ticketCount)} aria-label="Số vé trong portfolio" />
       <div className="portfolio-metrics">
         <div><span>Ít nhất 4 số</span><strong>{percent(odds.atLeast4)}</strong><small>{oneIn(odds.atLeast4)}</small></div>
         <div><span>Ít nhất 5 số</span><strong>{percent(odds.atLeast5)}</strong><small>{oneIn(odds.atLeast5)}</small></div>
