@@ -1,22 +1,37 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "mega645",
-  "recordCount": 1362,
-  "firstDrawDate": "2017-10-25",
-  "latestDrawDate": "2026-09-06",
-  "lastAttemptedSync": "2026-09-09T18:31:31.673Z",
-  "lastSuccessfulSync": "2026-09-09T18:31:31.673Z",
+  "recordCount": 1561,
+  "firstDrawId": "00001",
+  "firstDrawDate": "2016-07-20",
+  "latestDrawId": "01561",
+  "latestDrawDate": "2026-09-11",
+  "lastAttemptedSync": "2026-09-11T17:54:45.045Z",
+  "lastSuccessfulSync": "2026-09-11T17:54:45.045Z",
   "source": {
-    "id": "vietlott-data",
-    "url": "https://raw.githubusercontent.com/vietvudanh/vietlott-data/main/data/power645.jsonl",
-    "license": "MIT"
+    "primary": {
+      "id": "vietlott-official",
+      "url": "https://vietlott.vn/vi/trung-thuong/ket-qua-trung-thuong/winning-number-645",
+      "license": "public official website, no explicit reuse license stated"
+    },
+    "secondary": {
+      "id": "vietlott-data",
+      "url": "https://raw.githubusercontent.com/vietvudanh/vietlott-data/main/data/power645.jsonl",
+      "license": "MIT"
+    }
   },
-  "sourceEtag": "W/\"7edd34eecb9801b9c6995c0219cc2d4a7970381cb2cfb226570f70543ce9b35c\"",
-  "datasetSha256": "6410e30d0c4224fb2f319a765ec38429f8e476d8217765edfe2cba3ac7b23c38",
+  "sourceEtag": "01561",
+  "datasetSha256": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
   "validation": {
     "valid": true,
     "duplicates": 0,
     "conflicts": 0,
-    "rejected": 0
+    "rejected": 0,
+    "missingIds": []
+  },
+  "crossCheck": {
+    "status": "PASS",
+    "sampleSize": 8,
+    "checkedAt": "2026-09-11T17:57:47.456Z"
   }
 }
