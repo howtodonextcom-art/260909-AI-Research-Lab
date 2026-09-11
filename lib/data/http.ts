@@ -10,7 +10,7 @@
  */
 import type { FetchOptions } from "./types";
 
-export const ALLOWED_HOSTS = ["raw.githubusercontent.com"] as const;
+export const ALLOWED_HOSTS = ["raw.githubusercontent.com", "vietlott.vn"] as const;
 
 export const DEFAULT_TIMEOUT_MS = 20_000;
 export const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
@@ -90,29 +90,31 @@ export type GuardedResponse = {
   text: string | null;
 };
 
+type RequestInput = {
+  method: "GET" | "POST";
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+  fallbackEtag?: string | null;
+  signal?: AbortSignal;
+  timeoutMs: number;
+};
+
 /**
- * Performs one allowlisted GET with timeout, size cap and bounded retries.
- *
- * `etag` triggers a conditional request so an unchanged file costs one 304 —
- * but only when `avoidPreflight` is false.
- *
- * `avoidPreflight` exists because of a browser-only constraint verified at
- * runtime: `If-None-Match` (and a non-safelisted `Accept`) make the request
- * non-simple, so the browser sends a CORS preflight OPTIONS first, and
- * raw.githubusercontent.com answers OPTIONS with a non-2xx status. The GET
- * itself is perfectly CORS-enabled; only the preflight fails. Sending zero
- * custom headers keeps the request simple and it succeeds. `curl` never shows
- * this, because curl does not preflight.
+ * Shared allowlisted request core: timeout, abort wiring, size-capped read
+ * and bounded retry-with-backoff. `fetchGuarded` (GET + ETag) and
+ * `postGuarded` (POST, used by the official AjaxPro history endpoint) are
+ * thin, method-specific wrappers over this so both get identical guards.
  */
-export async function fetchGuarded(
-  url: string,
-  {
-    etag,
-    avoidPreflight = false,
-    signal,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-  }: FetchOptions & { etag?: string | null; avoidPreflight?: boolean } = {},
-): Promise<GuardedResponse> {
+async function performRequest({
+  method,
+  url,
+  headers,
+  body,
+  fallbackEtag,
+  signal,
+  timeoutMs,
+}: RequestInput): Promise<GuardedResponse> {
   assertAllowedUrl(url);
 
   let lastError: unknown;
@@ -126,20 +128,20 @@ export async function fetchGuarded(
     const timer = setTimeout(() => controller.abort(new Error("timeout")), timeoutMs);
 
     try {
-      const headers: Record<string, string> = {};
-      if (!avoidPreflight) {
-        headers.Accept = "text/plain, application/json";
-        if (etag) headers["If-None-Match"] = etag;
-      }
-
-      const response = await fetch(url, { headers, signal: controller.signal, redirect: "follow" });
+      const response = await fetch(url, {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+        redirect: "follow",
+      });
 
       if (response.status === 304) {
-        return { status: 304, etag: response.headers.get("etag") ?? etag ?? null, text: null };
+        return { status: 304, etag: response.headers.get("etag") ?? fallbackEtag ?? null, text: null };
       }
       if (!response.ok) {
         throw new HttpError(
-          `HTTP ${response.status} khi tải ${url}`,
+          `HTTP ${response.status} khi gọi ${url}`,
           response.status,
           isRetryableStatus(response.status),
         );
@@ -164,5 +166,65 @@ export async function fetchGuarded(
 
   if (lastError instanceof HttpError) throw lastError;
   const message = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new HttpError(`Không thể tải ${url}: ${message}`, null, true);
+  throw new HttpError(`Không thể gọi ${url}: ${message}`, null, true);
+}
+
+/**
+ * Performs one allowlisted GET with timeout, size cap and bounded retries.
+ *
+ * `etag` triggers a conditional request so an unchanged file costs one 304 —
+ * but only when `avoidPreflight` is false.
+ *
+ * `avoidPreflight` exists because of a browser-only constraint verified at
+ * runtime: `If-None-Match` (and a non-safelisted `Accept`) make the request
+ * non-simple, so the browser sends a CORS preflight OPTIONS first, and
+ * raw.githubusercontent.com answers OPTIONS with a non-2xx status. The GET
+ * itself is perfectly CORS-enabled; only the preflight fails. Sending zero
+ * custom headers keeps the request simple and it succeeds. `curl` never shows
+ * this, because curl does not preflight.
+ */
+export async function fetchGuarded(
+  url: string,
+  {
+    etag,
+    avoidPreflight = false,
+    signal,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  }: FetchOptions & { etag?: string | null; avoidPreflight?: boolean } = {},
+): Promise<GuardedResponse> {
+  const headers: Record<string, string> = {};
+  if (!avoidPreflight) {
+    headers.Accept = "text/plain, application/json";
+    if (etag) headers["If-None-Match"] = etag;
+  }
+  return performRequest({ method: "GET", url, headers, fallbackEtag: etag, signal, timeoutMs });
+}
+
+/**
+ * Performs one allowlisted, header-bearing GET (no ETag semantics). Used for
+ * plain HTML pages — e.g. the official Vietlott history/detail pages — that
+ * offer no conditional-request support at all.
+ */
+export async function getGuarded(
+  url: string,
+  { headers = {}, signal, timeoutMs = DEFAULT_TIMEOUT_MS }: FetchOptions & { headers?: Record<string, string> } = {},
+): Promise<GuardedResponse> {
+  return performRequest({ method: "GET", url, headers, signal, timeoutMs });
+}
+
+/**
+ * Performs one allowlisted, JSON-bodied POST with the same guards as GET.
+ * Used for the official Vietlott AjaxPro history-pagination endpoint, which
+ * has no GET equivalent.
+ */
+export async function postGuarded(
+  url: string,
+  {
+    headers = {},
+    body,
+    signal,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  }: FetchOptions & { headers?: Record<string, string>; body: string },
+): Promise<GuardedResponse> {
+  return performRequest({ method: "POST", url, headers, body, signal, timeoutMs });
 }

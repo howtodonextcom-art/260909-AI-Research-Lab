@@ -9,17 +9,20 @@ const draw = (id: string, date: string): DrawRecord => ({ id, date, result: [1, 
 
 function manifestWith(lastSuccessfulSync: string | null): DatasetManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     product: "mega645",
     recordCount: 1,
+    firstDrawId: "00198",
     firstDrawDate: "2017-10-25",
+    latestDrawId: "00198",
     latestDrawDate: "2017-10-25",
     lastAttemptedSync: lastSuccessfulSync,
     lastSuccessfulSync,
-    source: { id: "vietlott-data", url: VIETLOTT_DATA_URL, license: "MIT" },
+    source: { primary: { id: "vietlott-data", url: VIETLOTT_DATA_URL, license: "MIT" }, secondary: null },
     sourceEtag: null,
     datasetSha256: "0".repeat(64),
-    validation: { valid: true, duplicates: 0, conflicts: 0, rejected: 0 },
+    validation: { valid: true, duplicates: 0, conflicts: 0, rejected: 0, missingIds: [] },
+    crossCheck: { status: "NOT_RUN", sampleSize: 0, checkedAt: null },
   };
 }
 
@@ -101,7 +104,7 @@ test("allowlist chặn host lạ (chống SSRF)", () => {
 });
 
 test("allowlist chỉ chứa host đã được kiểm chứng", () => {
-  assert.deepEqual([...ALLOWED_HOSTS], ["raw.githubusercontent.com"]);
+  assert.deepEqual([...ALLOWED_HOSTS], ["raw.githubusercontent.com", "vietlott.vn"]);
   assert.equal(new URL(VIETLOTT_DATA_URL).hostname, "raw.githubusercontent.com");
 });
 
