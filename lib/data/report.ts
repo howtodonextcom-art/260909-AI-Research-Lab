@@ -69,18 +69,22 @@ export function formatManifestStatus(
   if (!manifest) {
     return `\nKhông có manifest. Dataset local có ${recordCount} bản ghi.\nChạy: npm run data:sync`;
   }
-  return [
+  const rows = [
     "\nTRẠNG THÁI DỮ LIỆU",
     line("Sản phẩm", manifest.product),
     line("Số kỳ", manifest.recordCount),
-    line("Từ ngày", manifest.firstDrawDate ?? "—"),
-    line("Đến ngày", manifest.latestDrawDate ?? "—"),
-    line("Nguồn", `${manifest.source.id} (${manifest.source.license})`),
-    line("URL", manifest.source.url),
+    line("Kỳ đầu tiên", manifest.firstDrawId ? `#${manifest.firstDrawId} (${manifest.firstDrawDate ?? "—"})` : "—"),
+    line("Kỳ mới nhất", manifest.latestDrawId ? `#${manifest.latestDrawId} (${manifest.latestDrawDate ?? "—"})` : "—"),
+    line("Nguồn chính", `${manifest.source.primary.id} (${manifest.source.primary.license})`),
+    line("URL nguồn chính", manifest.source.primary.url),
+    line("Nguồn phụ (đối chiếu)", manifest.source.secondary ? `${manifest.source.secondary.id} (${manifest.source.secondary.license})` : "—"),
     line("Lần thử gần nhất", manifest.lastAttemptedSync ?? "—"),
     line("Lần thành công gần nhất", manifest.lastSuccessfulSync ?? "—"),
     line("SHA-256", manifest.datasetSha256),
     line("Hợp lệ", manifest.validation.valid ? "có" : "KHÔNG"),
     line("Trùng / Xung đột / Loại", `${manifest.validation.duplicates} / ${manifest.validation.conflicts} / ${manifest.validation.rejected}`),
-  ].join("\n");
+    line("Kỳ thiếu (continuity)", manifest.validation.missingIds.length ? manifest.validation.missingIds.join(", ") : "không có"),
+    line("Đối chiếu chéo (cross-check)", `${manifest.crossCheck.status} (mẫu ${manifest.crossCheck.sampleSize}, lúc ${manifest.crossCheck.checkedAt ?? "—"})`),
+  ];
+  return rows.join("\n");
 }

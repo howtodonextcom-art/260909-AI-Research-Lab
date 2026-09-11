@@ -73,16 +73,37 @@ export type SourceDescriptor = {
   license: string;
 };
 
+export type CrossCheckManifestSummary = {
+  status: "PASS" | "FAIL" | "PARTIAL" | "EMPTY" | "NOT_RUN";
+  sampleSize: number;
+  checkedAt: string | null;
+};
+
+/**
+ * Manifest v2 (§13 of the research-core upgrade). Additive over v1: every v1
+ * field keeps its name and meaning (`shouldAutoRefresh` and the existing UI
+ * read several of them directly), so a v1 manifest on disk still satisfies
+ * `isManifest`. New in v2: `firstDrawId`/`latestDrawId`, `source.secondary`
+ * (the mirror is now cross-check-only, never authoritative — see ADR-001),
+ * `continuity` (§9) and `crossCheck` (§11). `source` was restructured from a
+ * flat descriptor to `{ primary, secondary }`; the only reader of the old
+ * shape (`components/data-status.tsx`) was updated alongside this type.
+ */
 export type DatasetManifest = {
   schemaVersion: number;
   product: ProductId;
   recordCount: number;
+  firstDrawId: string | null;
   firstDrawDate: string | null;
+  latestDrawId: string | null;
   latestDrawDate: string | null;
   lastAttemptedSync: string | null;
   lastSuccessfulSync: string | null;
-  source: SourceDescriptor;
-  /** Conditional-request token from the last successful fetch, when offered. */
+  source: {
+    primary: SourceDescriptor;
+    secondary: SourceDescriptor | null;
+  };
+  /** Conditional-request token (or, for the official adapter, the last-synced draw id — see vietlott-official.ts) from the last successful fetch, when offered. */
   sourceEtag: string | null;
   datasetSha256: string;
   validation: {
@@ -90,7 +111,9 @@ export type DatasetManifest = {
     duplicates: number;
     conflicts: number;
     rejected: number;
+    missingIds: string[];
   };
+  crossCheck: CrossCheckManifestSummary;
 };
 
 /** Cursor handed to a source so it can skip work when nothing changed. */

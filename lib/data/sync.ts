@@ -125,6 +125,7 @@ export async function runSync(deps: SyncDeps, options: SyncOptions = {}): Promis
       duplicates: 0,
       conflicts: 0,
       rejected: 0,
+      previousCrossCheck: previousManifest?.crossCheck ?? null,
     });
     await deps.saveManifest(manifest);
     return {
@@ -198,6 +199,7 @@ export async function runSync(deps: SyncDeps, options: SyncOptions = {}): Promis
     duplicates: merged.duplicates,
     conflicts: 0,
     rejected: 0,
+    previousCrossCheck: previousManifest?.crossCheck ?? null,
   });
 
   try {

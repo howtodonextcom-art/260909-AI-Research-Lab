@@ -120,7 +120,7 @@ export function DataStatus({ state }: { state: DrawDataState }) {
         </div>
         <div>
           <dt>Nguồn</dt>
-          <dd>{manifest ? `${manifest.source.id} (${manifest.source.license})` : "vietlott-data (MIT)"}</dd>
+          <dd>{manifest ? `${manifest.source.primary.id} (${manifest.source.primary.license})` : "vietlott-official"}</dd>
         </div>
         <div>
           <dt>Đang đọc từ</dt>

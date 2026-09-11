@@ -13,11 +13,13 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test": "npm run test:business && npm run data:test",
     "test:business": "node --import=tsx --test lib/mega645.test.ts lib/analytics.test.ts lib/profit.test.ts lib/portfolio.test.ts",
-    "data:test": "node --import=tsx --test lib/data/schema.test.ts lib/data/jsonl.test.ts lib/data/merge.test.ts lib/data/sync.test.ts lib/data/refresh.test.ts",
+    "data:test": "node --import=tsx --test lib/data/schema.test.ts lib/data/jsonl.test.ts lib/data/merge.test.ts lib/data/sync.test.ts lib/data/refresh.test.ts lib/data/continuity.test.ts lib/data/cross-check.test.ts lib/data/sources/vietlott-official.test.ts",
     "data:sync": "node --import=tsx scripts/data-sync.ts",
     "data:check": "node --import=tsx scripts/data-check.ts",
     "data:status": "node --import=tsx scripts/data-status.ts",
+    "data:status:json": "node --import=tsx scripts/data-status.ts --json",
     "data:verify-live": "node --import=tsx scripts/data-verify-live.ts",
+    "data:cross-check": "node --import=tsx scripts/data-cross-check.ts",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
