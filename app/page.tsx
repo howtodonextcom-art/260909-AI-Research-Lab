@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { STRATEGIES, calculateFrequency, chiSquareStatistic, createStrategyPick, filterByWindow, formatPercent, runTemporalBacktestReport, runWalkForwardBacktest, type DrawRecord, type StrategyId, type WindowId } from "@/lib/analytics";
+import { STRATEGIES, calculateFrequency, createStrategyPick, filterByWindow, formatPercent, runTemporalBacktestReport, runWalkForwardBacktest, type DrawRecord, type StrategyId, type WindowId } from "@/lib/analytics";
+import { monteCarloFairnessDiagnostic } from "@/lib/research/statistics";
 import { evaluateTicket, formatBall, formatVnd, generateQuickPick, type TicketResult } from "@/lib/mega645";
 import { useDrawData, type DrawDataState } from "@/hooks/use-draw-data";
 
@@ -75,6 +76,14 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
   const [strategy, setStrategy] = useState<StrategyId>("HOT");
   const windowDraws = useMemo(() => filterByWindow(draws, windowId), [draws, windowId]);
   const frequencies = useMemo(() => calculateFrequency(windowDraws), [windowDraws]);
+  // §21: Mega 6/45 samples six numbers without replacement, so per-number counts
+  // are negatively correlated and the classical chi-square(44) reference does
+  // not strictly apply. Calibrated against an empirical null instead of
+  // asserted against a theoretical df — see lib/research/statistics.ts.
+  const fairness = useMemo(
+    () => monteCarloFairnessDiagnostic(windowDraws, { simulationCount: 300, seed: 645 }),
+    [windowDraws],
+  );
   const backtests = useMemo(() => runWalkForwardBacktest(draws, 90), [draws]);
   const temporalReport = useMemo(() => runTemporalBacktestReport(draws, 90), [draws]);
   const random = backtests.find((item) => item.strategy === "RANDOM");
@@ -111,7 +120,11 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
 
         <div className="metrics-grid">
           <Metric label="Số kỳ trong mẫu" value={windowDraws.length.toLocaleString("vi-VN")} note={(windowDraws.length * 6).toLocaleString("vi-VN") + " bóng đã quay"} />
-          <Metric label="Chi-square mô tả" value={chiSquareStatistic(frequencies).toFixed(1)} note="44 bậc tự do · giá trị gần 44 nghĩa là dữ liệu phù hợp quay công bằng" />
+          <Metric
+            label="Chẩn đoán độ công bằng (Monte Carlo)"
+            value={`Q=${fairness.observedStatistic.toFixed(1)} · p≈${fairness.monteCarloPValue.toFixed(3)}`}
+            note={`Đối chiếu với ${fairness.simulationCount} bộ dữ liệu quay công bằng mô phỏng (seed=${fairness.seed}) — không phải chỉ báo dự đoán`}
+          />
           <Metric label={STRATEGIES[strategy].name + " qua cổng sàng lọc"} value={gatesPassed + " / 3"} note="Cổng in-sample, không phải xác nhận" tone={gatesPassed === 3 ? "good" : "bad"} />
           <Metric label="Xác suất Jackpot" value="1 / 8.145.060" note="Không đổi theo số nóng hoặc lạnh" />
         </div>
