@@ -1,0 +1,53 @@
+{
+  "experimentId": "protocol-2026-09-10.1-primary-strategies-cold-8e26f348",
+  "gitCommit": "d9dfc09e583732d1f1180a23aa599c74b94e8cd0",
+  "datasetSha256": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
+  "protocolVersion": "2026-09-10.1",
+  "protocolHash": "089e16b90b1d168e69142faf678b5bc66e831310cf99b30c4f0db259c27badef",
+  "strategy": {
+    "id": "COLD",
+    "version": "2026-09-10.1",
+    "parameters": {
+      "lookback": 90
+    }
+  },
+  "seed": 645,
+  "temporalSplit": {
+    "development": {
+      "startDate": "2017-02-17",
+      "endDate": "2021-12-19",
+      "trials": 735
+    },
+    "validation": {
+      "startDate": "2021-12-22",
+      "endDate": "2024-05-03",
+      "trials": 368
+    },
+    "test": {
+      "startDate": "2024-05-05",
+      "endDate": "2026-09-11",
+      "trials": 368
+    }
+  },
+  "metrics": {
+    "averageMatches": 0.7771739130434783,
+    "edgeVsRandom": -0.028023097826086918,
+    "hit3Rate": 1.6304347826086956,
+    "roi": -95.1086956521739
+  },
+  "statistics": {
+    "effectSize": -0.028023097826086918,
+    "confidenceInterval": [
+      -0.10820838751222707,
+      0.052162191860053234
+    ],
+    "pValue": 0.7533216081137013,
+    "adjustedPValue": 1
+  },
+  "controls": {},
+  "runtime": {
+    "startedAt": "2026-09-11T18:06:36.472Z",
+    "finishedAt": "2026-09-11T18:06:36.639Z",
+    "durationMs": 167
+  }
+}
