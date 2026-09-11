@@ -25,8 +25,8 @@ test("xác suất portfolio tăng tuyến tính nhưng không đổi xác suất
   const one = calculatePortfolioOdds(1);
   const ten = calculatePortfolioOdds(10);
   assert.equal(ten.cost, 100_000);
-  assert.ok(Math.abs(ten.atLeast4 - one.atLeast4 * 10) < 1e-15);
-  assert.equal(ten.jackpot, 10 / 8_145_060);
+  assert.ok(Math.abs(ten.exactProbabilityAtLeast4 - one.exactProbabilityAtLeast4 * 10) < 1e-15);
+  assert.equal(ten.exactProbabilityJackpot, 10 / 8_145_060);
 });
 
 test("từ chối số vé ngoài giới hạn", () => {

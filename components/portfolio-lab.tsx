@@ -50,9 +50,9 @@ export function PortfolioLab() {
       <label htmlFor="ticket-count">Số vé: {ticketCount}</label>
       <Slider id="ticket-count" min={1} max={30} step={1} value={[ticketCount]} onValueChange={value => setTicketCount(value[0] ?? ticketCount)} aria-label="Số vé trong portfolio" />
       <div className="portfolio-metrics">
-        <div><span>Ít nhất 4 số</span><strong>{percent(odds.atLeast4)}</strong><small>{oneIn(odds.atLeast4)}</small></div>
-        <div><span>Ít nhất 5 số</span><strong>{percent(odds.atLeast5)}</strong><small>{oneIn(odds.atLeast5)}</small></div>
-        <div><span>Jackpot</span><strong>{percent(odds.jackpot)}</strong><small>{oneIn(odds.jackpot)}</small></div>
+        <div><span>Ít nhất 4 số</span><strong>{percent(odds.exactProbabilityAtLeast4)}</strong><small>{oneIn(odds.exactProbabilityAtLeast4)}</small></div>
+        <div><span>Ít nhất 5 số</span><strong>{percent(odds.exactProbabilityAtLeast5)}</strong><small>{oneIn(odds.exactProbabilityAtLeast5)}</small></div>
+        <div><span>Jackpot</span><strong>{percent(odds.exactProbabilityJackpot)}</strong><small>{oneIn(odds.exactProbabilityJackpot)}</small></div>
         <div><span>Cặp số được phủ</span><strong>{countCoveredPairs(portfolio).toLocaleString("vi-VN")}</strong><small>15 cặp/vé, không lặp</small></div>
       </div>
     </section>

@@ -1,9 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
 import { AlertTriangle, Check, CloudDownload, Database, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DrawDataState } from "@/hooks/use-draw-data";
+import { analyzeContinuity } from "@/lib/data/continuity";
+import { CURRENT_PROTOCOL } from "@/lib/research/protocol";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -85,6 +88,7 @@ export function DataStatus({ state }: { state: DrawDataState }) {
   const status = describe(state);
   const manifest = state.manifest;
   const latestRecord = state.records.at(-1);
+  const continuity = useMemo(() => analyzeContinuity(state.records), [state.records]);
 
   return (
     <section className="analysis-card data-status-card" aria-labelledby="data-status-heading">
@@ -125,6 +129,22 @@ export function DataStatus({ state }: { state: DrawDataState }) {
         <div>
           <dt>Đang đọc từ</dt>
           <dd>{state.origin === "cache" ? "bộ nhớ trên thiết bị" : "dữ liệu kèm theo ứng dụng"}</dd>
+        </div>
+        <div>
+          <dt>Tính liên tục dữ liệu</dt>
+          <dd>{continuity.continuous ? "Đầy đủ, không thiếu kỳ" : `Thiếu ${continuity.missingIds.length} kỳ, trùng ${continuity.duplicateIds.length}`}</dd>
+        </div>
+        <div>
+          <dt>SHA-256 bộ dữ liệu</dt>
+          <dd>{manifest ? `${manifest.datasetSha256.slice(0, 12)}…` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Đối chiếu chéo (mirror)</dt>
+          <dd>{manifest?.crossCheck.status ?? "NOT_RUN"}</dd>
+        </div>
+        <div>
+          <dt>Phiên bản giao thức nghiên cứu</dt>
+          <dd>{CURRENT_PROTOCOL.version}</dd>
         </div>
       </dl>
 
