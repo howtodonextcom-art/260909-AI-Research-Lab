@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { parseDrawsJsonl, parseJsonlRows, serializeDrawsJsonl } from "./jsonl";
+import { canonicalizeNewlines, parseDrawsJsonl, parseJsonlRows, serializeDrawsJsonl } from "./jsonl";
 import { sha256Hex } from "./hash";
 
 const fixtures = path.join(fileURLToPath(new URL("../../", import.meta.url)), "test/fixtures");
@@ -64,8 +64,15 @@ test("hash thay đổi khi dữ liệu thay đổi", async () => {
 
 test("snapshot bundled thật đã ở dạng canonical", () => {
   const root = fileURLToPath(new URL("../../", import.meta.url));
-  const text = readFileSync(path.join(root, "public/data/power645.jsonl"), "utf8");
+  const text = canonicalizeNewlines(readFileSync(path.join(root, "public/data/power645.jsonl"), "utf8"));
   const parsed = parseDrawsJsonl(text);
   assert.equal(parsed.issues.length, 0, "snapshot kèm theo không được chứa bản ghi lỗi");
   assert.equal(serializeDrawsJsonl(parsed.records), text, "snapshot phải bằng đúng dạng canonical");
+});
+
+test("canonicalizeNewlines biến CRLF thành LF trước khi so hash", () => {
+  const lf = '{"date":"2017-10-25","id":"00198","result":[1,2,3,4,5,6]}\n';
+  const crlf = lf.replace(/\n/g, "\r\n");
+  assert.equal(canonicalizeNewlines(crlf), lf);
+  assert.equal(serializeDrawsJsonl(parseDrawsJsonl(crlf).records), canonicalizeNewlines(crlf));
 });

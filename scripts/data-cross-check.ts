@@ -50,6 +50,13 @@ const report = await runCrossCheck({
 
 console.log(`\n  Mẫu (${report.sampleSize}, seed=${report.seed}): ${report.sampledIds.join(", ")}`);
 console.log(`  Trạng thái: ${report.status} (khớp lỗi: ${report.failureCount}, lỗi tải: ${report.fetchErrorCount})`);
+if (report.idSet.compared) {
+  console.log(
+    `  Id-set official vs mirror: chung ${report.idSet.sharedCount}, chỉ local ${report.idSet.onlyLocal.length}, chỉ mirror ${report.idSet.onlyMirror.length}`,
+  );
+} else {
+  console.log("  Id-set official vs mirror: chưa đối chiếu (mirror không khả dụng)");
+}
 for (const result of report.results) {
   const line = result.mismatches.length ? result.mismatches.join(" | ") : "khớp";
   console.log(`    #${result.id}: ${line}`);

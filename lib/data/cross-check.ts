@@ -25,6 +25,15 @@ export type CrossCheckSampleResult = {
 
 export type CrossCheckStatus = "PASS" | "FAIL" | "PARTIAL" | "EMPTY";
 
+export type IdSetCompare = {
+  compared: boolean;
+  localCount: number;
+  mirrorCount: number;
+  sharedCount: number;
+  onlyLocal: string[];
+  onlyMirror: string[];
+};
+
 export type CrossCheckReport = {
   sampleSize: number;
   seed: number;
@@ -33,7 +42,33 @@ export type CrossCheckReport = {
   status: CrossCheckStatus;
   failureCount: number;
   fetchErrorCount: number;
+  idSet: IdSetCompare;
 };
+
+export function compareIdSets(localRecords: DrawRecord[], mirrorRecords: DrawRecord[] | null): IdSetCompare {
+  if (!mirrorRecords) {
+    return {
+      compared: false,
+      localCount: localRecords.length,
+      mirrorCount: 0,
+      sharedCount: 0,
+      onlyLocal: [],
+      onlyMirror: [],
+    };
+  }
+  const localIds = new Set(localRecords.map((record) => record.id));
+  const mirrorIds = new Set(mirrorRecords.map((record) => record.id));
+  const onlyLocal = [...localIds].filter((id) => !mirrorIds.has(id)).sort();
+  const onlyMirror = [...mirrorIds].filter((id) => !localIds.has(id)).sort();
+  return {
+    compared: true,
+    localCount: localIds.size,
+    mirrorCount: mirrorIds.size,
+    sharedCount: [...localIds].filter((id) => mirrorIds.has(id)).length,
+    onlyLocal,
+    onlyMirror,
+  };
+}
 
 /** Deterministic PRNG (mulberry32) so sampling is reproducible from `seed` alone. */
 function mulberry32(seed: number): () => number {
@@ -83,8 +118,10 @@ export async function runCrossCheck(input: CrossCheckInput): Promise<CrossCheckR
   const seed = input.seed ?? 645;
   const sampledIds = selectDeterministicSampleIds(input.localRecords, extraSampleSize, seed);
 
+  const idSet = compareIdSets(input.localRecords, input.mirrorRecords);
+
   if (sampledIds.length === 0) {
-    return { sampleSize: 0, seed, sampledIds: [], results: [], status: "EMPTY", failureCount: 0, fetchErrorCount: 0 };
+    return { sampleSize: 0, seed, sampledIds: [], results: [], status: "EMPTY", failureCount: 0, fetchErrorCount: 0, idSet };
   }
 
   const localById = new Map(input.localRecords.map((record) => [record.id, record]));
@@ -130,5 +167,5 @@ export async function runCrossCheck(input: CrossCheckInput): Promise<CrossCheckR
   }
 
   const status: CrossCheckStatus = failureCount > 0 ? "FAIL" : fetchErrorCount > 0 ? "PARTIAL" : "PASS";
-  return { sampleSize: sampledIds.length, seed, sampledIds, results, status, failureCount, fetchErrorCount };
+  return { sampleSize: sampledIds.length, seed, sampledIds, results, status, failureCount, fetchErrorCount, idSet };
 }

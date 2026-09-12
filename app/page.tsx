@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { STRATEGIES, calculateFrequency, createStrategyPick, filterByWindow, formatPercent, runTemporalBacktestReport, runWalkForwardBacktest, type DrawRecord, type StrategyId, type WindowId } from "@/lib/analytics";
+import { CURRENT_PROTOCOL } from "@/lib/research/protocol";
 import { monteCarloFairnessDiagnostic } from "@/lib/research/statistics";
 import { evaluateTicket, formatBall, formatVnd, generateQuickPick, type TicketResult } from "@/lib/mega645";
 import { useDrawData, type DrawDataState } from "@/hooks/use-draw-data";
@@ -81,7 +82,7 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
   // not strictly apply. Calibrated against an empirical null instead of
   // asserted against a theoretical df — see lib/research/statistics.ts.
   const fairness = useMemo(
-    () => monteCarloFairnessDiagnostic(windowDraws, { simulationCount: 300, seed: 645 }),
+    () => monteCarloFairnessDiagnostic(windowDraws, { simulationCount: CURRENT_PROTOCOL.fairnessSimulationCount, seed: 645 }),
     [windowDraws],
   );
   const backtests = useMemo(() => runWalkForwardBacktest(draws, 90), [draws]);
@@ -196,7 +197,7 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
               </TableRow>)}</TableBody>
             </Table>
           </div>
-          <p className="method-note"><Info /><span>{selectedReliability ? STRATEGIES[selectedReliability.strategy].name + " được chọn bằng validation rồi kiểm tra trên test chưa dùng để chọn." : "Không chiến lược nào đạt ngưỡng trên validation để được chọn."} P-value dùng kiểm định một phía so với random và hiệu chỉnh Holm-Bonferroni cho ba chiến lược. Đây là <strong>chia hồi cứu trên dữ liệu đã có sẵn</strong>: tập test là holdout theo nghĩa cơ học (không dùng để chọn), nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ các kỳ quay phát sinh sau khi protocol <code>{temporalReport.protocolVersion}</code> được khóa mới là bằng chứng prospective thật sự.</span></p>
+          <p className="method-note"><Info /><span>{selectedReliability ? STRATEGIES[selectedReliability.strategy].name + " được chọn bằng validation rồi kiểm tra trên test chưa dùng để chọn." : "Không chiến lược nào đạt ngưỡng trên validation để được chọn."} P-value dùng kiểm định một phía so với random và hiệu chỉnh Holm-Bonferroni theo familySize ({temporalReport.familySize} chiến lược trong họ kiểm định; registry rỗng thì bằng số chiến lược không phải RANDOM đang thấy). Đây là <strong>chia hồi cứu trên dữ liệu đã có sẵn</strong>: tập test là holdout theo nghĩa cơ học (không dùng để chọn), nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ các kỳ quay phát sinh sau khi protocol <code>{temporalReport.protocolVersion}</code> được khóa mới là bằng chứng prospective thật sự.</span></p>
         </section>
 
         <ProfitLab />
@@ -261,7 +262,8 @@ export default function Home() {
   const error = Boolean(dataState.loadError);
   const firstDraw = draws[0];
   const latestDraw = draws.at(-1);
-  const dataRangeLabel = firstDraw && latestDraw ? `Vietlott-data · ${formatDateVi(firstDraw.date)}–${formatDateVi(latestDraw.date)}` : "Vietlott-data · đang tải";
+  const sourceLabel = dataState.manifest?.source.primary.id ?? "vietlott-official";
+  const dataRangeLabel = firstDraw && latestDraw ? `${sourceLabel} · ${formatDateVi(firstDraw.date)}–${formatDateVi(latestDraw.date)}` : `${sourceLabel} · đang tải`;
   return <main id="main-content" className="min-h-screen">
     <a className="skip-link" href="#workspace">Bỏ qua đến nội dung</a>
     <header className="topbar"><div className="brand-mark" aria-hidden="true">6<span>/</span>45</div><div><p className="brand-name">Mega 6/45 Research Lab</p><p className="brand-note">Phân tích độc lập · Không phải website Vietlott</p></div><Badge className="ml-auto hidden border-white/15 bg-white/8 text-slate-200 sm:inline-flex">MVP 02</Badge></header>

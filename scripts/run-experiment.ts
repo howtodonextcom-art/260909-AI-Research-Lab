@@ -9,18 +9,26 @@
  * dataset and writes real files under reports/experiments/.
  */
 import { execFileSync } from "node:child_process";
-import { mkdir, appendFile, writeFile } from "node:fs/promises";
+import { mkdir, appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runTemporalBacktestReport } from "../lib/analytics";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
-import { buildExperimentArtifactsFromReport, registerExperiment, transitionExperiment } from "../lib/research/experiments";
-import { CURRENT_PROTOCOL, computeProtocolHash } from "../lib/research/protocol";
+import {
+  buildExperimentArtifactsFromReport,
+  countFamilyExperiments,
+  parseExperimentRegistry,
+  registerExperiment,
+  registryHasExperiment,
+  transitionExperiment,
+} from "../lib/research/experiments";
+import { CURRENT_PROTOCOL, computeProtocolHash, parseProtocolLock } from "../lib/research/protocol";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const paths = resolvePaths(projectRoot);
 const experimentsDir = path.join(projectRoot, "reports", "experiments");
 const registryPath = path.join(experimentsDir, "registry.jsonl");
+const lockPath = path.join(projectRoot, "reports", "protocol-lock.json");
 
 function gitCommit(): string | null {
   try {
@@ -36,15 +44,32 @@ if (!snapshot.records.length || !snapshot.manifest) {
   process.exit(1);
 }
 
+let registryText = "";
+try {
+  registryText = await readFile(registryPath, "utf8");
+} catch {
+  registryText = "";
+}
+const existing = parseExperimentRegistry(registryText);
+
+let protocolLock = null;
+try {
+  protocolLock = parseProtocolLock(JSON.parse(await readFile(lockPath, "utf8")));
+} catch {
+  protocolLock = null;
+}
+
 const startedAt = new Date().toISOString();
 const protocolHash = await computeProtocolHash(CURRENT_PROTOCOL);
-const report = runTemporalBacktestReport(snapshot.records, CURRENT_PROTOCOL.lookback, CURRENT_PROTOCOL.alpha);
+const familyId = `protocol-${CURRENT_PROTOCOL.version}-primary-strategies`;
+const familySize = countFamilyExperiments(existing, familyId) || 3;
+const report = runTemporalBacktestReport(snapshot.records, CURRENT_PROTOCOL.lookback, CURRENT_PROTOCOL.alpha, familySize);
 const finishedAt = new Date().toISOString();
 
-const familyId = `protocol-${CURRENT_PROTOCOL.version}-primary-strategies`;
 const datasetHash = snapshot.manifest.datasetSha256;
 const commit = gitCommit();
 const seed = 645;
+const latestDrawId = snapshot.manifest.latestDrawId ?? snapshot.records.at(-1)?.id ?? null;
 
 await mkdir(experimentsDir, { recursive: true });
 
@@ -56,6 +81,10 @@ for (const strategy of strategies) {
 
 for (const strategy of strategies) {
   const experimentId = experimentIds.get(strategy)!;
+  if (registryHasExperiment(existing, experimentId)) {
+    console.log(`  Bỏ qua ${experimentId} (đã có trong registry)`);
+    continue;
+  }
   const registered = registerExperiment({
     experimentId,
     hypothesisId: `${strategy}-vs-random`,
@@ -70,6 +99,7 @@ for (const strategy of strategies) {
   });
   const completed = transitionExperiment(registered, "COMPLETED");
   await appendFile(registryPath, `${JSON.stringify(completed)}\n`, "utf8");
+  existing.push(completed);
 }
 
 const artifacts = buildExperimentArtifactsFromReport({
@@ -80,6 +110,8 @@ const artifacts = buildExperimentArtifactsFromReport({
   experimentIdFor: (strategy) => experimentIds.get(strategy)!,
   runtime: { startedAt, finishedAt },
   protocolHash,
+  protocolLock,
+  latestDrawId,
 });
 
 for (const artifact of artifacts) {
@@ -88,9 +120,11 @@ for (const artifact of artifacts) {
 
 console.log(`\nĐÃ ĐĂNG KÝ VÀ HOÀN THÀNH ${artifacts.length} THỬ NGHIỆM`);
 console.log(`  familyId:      ${familyId}`);
+console.log(`  familySize:    ${familySize}`);
 console.log(`  protocolHash:  ${protocolHash}`);
 console.log(`  datasetHash:   ${datasetHash}`);
 console.log(`  gitCommit:     ${commit ?? "—"}`);
+console.log(`  evidence:      ${artifacts[0]?.controls.latestDrawEvidence ?? "—"}`);
 for (const artifact of artifacts) {
   console.log(
     `  ${artifact.strategy.id.padEnd(10)} edge(test)=${artifact.statistics.effectSize?.toFixed(3)} ` +

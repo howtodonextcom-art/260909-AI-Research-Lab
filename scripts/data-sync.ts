@@ -20,6 +20,7 @@ import { formatSyncReport } from "../lib/data/report";
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const paths = resolvePaths(projectRoot);
 const force = process.argv.includes("--force");
+const allowGaps = process.argv.includes("--allow-gaps");
 
 // Stamps the demoted mirror in as `source.secondary`; `runSync` builds the
 // manifest generically and has no notion of a secondary source.
@@ -35,7 +36,7 @@ const summary = await runSync(
     saveManifest: (manifest) => saveManifest(paths, withSecondary(manifest)),
     now: () => new Date(),
   },
-  { force, timeoutMs: 30_000 },
+  { force, allowGaps, timeoutMs: 30_000 },
 );
 
 console.log(formatSyncReport(summary));

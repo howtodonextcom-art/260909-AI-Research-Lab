@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DATA_REFRESH_TTL_MS, pickBestSnapshot, shouldAutoRefresh, type LoadedDataset } from "./refresh";
+import { DATA_REFRESH_TTL_MS, REFRESH_API_URL, pickBestSnapshot, refreshDataset, shouldAutoRefresh, type LoadedDataset } from "./refresh";
 import { ALLOWED_HOSTS, assertAllowedUrl, HttpError } from "./http";
-import { VIETLOTT_DATA_URL, browserVietlottDataAdapter, vietlottDataAdapter } from "./sources/vietlott-data";
+import { VIETLOTT_DATA_URL } from "./sources/vietlott-data";
 import type { DatasetManifest, DrawRecord } from "./types";
 
 const draw = (id: string, date: string): DrawRecord => ({ id, date, result: [1, 2, 3, 4, 5, 6] });
@@ -108,31 +108,40 @@ test("allowlist chỉ chứa host đã được kiểm chứng", () => {
   assert.equal(new URL(VIETLOTT_DATA_URL).hostname, "raw.githubusercontent.com");
 });
 
-// Regression: gửi If-None-Match từ browser làm request thành non-simple, kích
-// hoạt CORS preflight OPTIONS mà raw.githubusercontent.com trả về non-2xx, nên
-// toàn bộ lần cập nhật thất bại. Lỗi này chỉ lộ ra khi chạy thật trên trình duyệt.
-test("adapter cho browser KHÔNG gửi header gây CORS preflight", async () => {
-  const body = Array.from({ length: 120 }, (_, index) =>
-    JSON.stringify({
-      date: `2018-01-${String((index % 28) + 1).padStart(2, "0")}`,
-      id: String(index + 1).padStart(5, "0"),
-      result: [1, 2, 3, 4, 5, 6],
-    }),
-  ).join("\n");
-
-  const captured: Array<Record<string, string>> = [];
+test("refreshDataset gọi route nội bộ thay vì mirror browser adapter", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async (_url: string, init?: RequestInit) => {
-    captured.push({ ...((init?.headers as Record<string, string>) ?? {}) });
-    return new Response(body, { status: 200, headers: { ETag: 'W/"x"' } });
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    return Response.json({
+      summary: {
+        status: "not-modified",
+        fetched: 0,
+        valid: 0,
+        added: 0,
+        unchanged: 0,
+        duplicates: 0,
+        conflicts: 0,
+        rejected: 0,
+        totalAfterMerge: bundled.records.length,
+        firstDrawDate: bundled.records[0]?.date ?? null,
+        latestDrawDate: bundled.records.at(-1)?.date ?? null,
+        source: "vietlott-official",
+        fetchedAt: new Date(NOW).toISOString(),
+        datasetHash: "0".repeat(64),
+        issues: [],
+        conflictDetails: [],
+      },
+    });
   }) as typeof fetch;
 
   try {
-    await browserVietlottDataAdapter.fetchSince({ etag: 'W/"x"', latestDrawDate: null, latestId: null });
-    assert.deepEqual(captured.at(-1), {}, "browser phải gửi GET không kèm header tuỳ chỉnh");
-
-    await vietlottDataAdapter.fetchSince({ etag: 'W/"x"', latestDrawDate: null, latestId: null });
-    assert.equal(captured.at(-1)?.["If-None-Match"], 'W/"x"', "CLI vẫn dùng request có điều kiện");
+    const summary = await refreshDataset(bundled);
+    assert.equal(summary.source, "vietlott-official");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, REFRESH_API_URL);
+    assert.equal(calls[0].init?.method, "POST");
+    assert.match(String(calls[0].init?.body), /"records"/);
   } finally {
     globalThis.fetch = originalFetch;
   }

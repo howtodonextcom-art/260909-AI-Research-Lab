@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runTemporalBacktestReport, type DrawRecord } from "../analytics";
 import { createRng, drawFairTicket } from "./rng";
-import { buildExperimentArtifactsFromReport, registerExperiment, transitionExperiment } from "./experiments";
+import {
+  buildExperimentArtifactsFromReport,
+  countFamilyExperiments,
+  parseExperimentRegistry,
+  registerExperiment,
+  registryHasExperiment,
+  transitionExperiment,
+} from "./experiments";
+import { classifyEvidence, type ProtocolLock } from "./protocol";
 
 test("registerExperiment gắn registeredAt và status = REGISTERED", () => {
   const now = () => new Date("2026-09-12T00:00:00Z");
@@ -83,4 +91,44 @@ test("buildExperimentArtifactsFromReport tạo một artifact mỗi chiến lư�
     assert.ok(artifact.temporalSplit.validation.trials >= 0);
     assert.ok(artifact.temporalSplit.test.trials >= 0);
   }
+});
+
+test("registry parse + idempotent lookup theo experimentId", () => {
+  const line = JSON.stringify({
+    experimentId: "exp-1",
+    familyId: "family-1",
+    status: "COMPLETED",
+  });
+  const records = parseExperimentRegistry(`${line}\n${line}\n`);
+  assert.equal(records.length, 2);
+  assert.equal(registryHasExperiment(records, "exp-1"), true);
+  assert.equal(registryHasExperiment(records, "exp-missing"), false);
+  assert.equal(countFamilyExperiments(records, "family-1"), 1);
+  assert.equal(countFamilyExperiments(records, "other"), 0);
+});
+
+test("artifact gắn classifyEvidence từ protocol lock", () => {
+  const draws = syntheticDraws(400, 645);
+  const report = runTemporalBacktestReport(draws, 90, 0.05);
+  const lock: ProtocolLock = {
+    protocolVersion: "x",
+    protocolHash: "x",
+    protocolLockedAt: "2026-09-12T00:00:00Z",
+    protocolDatasetHash: "x",
+    prospectiveStartDrawId: "01562",
+  };
+  const artifacts = buildExperimentArtifactsFromReport({
+    report,
+    datasetSha256: "sha-abc",
+    gitCommit: null,
+    seed: 1,
+    experimentIdFor: (strategy) => `exp-${strategy}`,
+    runtime: { startedAt: "2026-09-12T00:00:00.000Z", finishedAt: "2026-09-12T00:00:01.000Z" },
+    protocolHash: "hash-abc",
+    protocolLock: lock,
+    latestDrawId: "01561",
+  });
+  assert.equal(artifacts[0]?.controls.latestDrawEvidence, classifyEvidence("01561", lock));
+  assert.equal(artifacts[0]?.controls.latestDrawEvidence, "RETROSPECTIVE");
+  assert.equal(artifacts[0]?.controls.primaryEndpoint, "mean_matched_numbers_per_ticket");
 });

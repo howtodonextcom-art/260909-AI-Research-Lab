@@ -7,6 +7,8 @@
  * that actually registers and completes experiments against real data.
  */
 import type { PhaseBacktestResult, StrategyId, TemporalBacktestReport } from "../analytics";
+import { EXPECTED_MATCHES, PRIMARY_ENDPOINT } from "./statistics";
+import { classifyEvidence, type ProtocolLock } from "./protocol";
 
 export type ExperimentStatus = "REGISTERED" | "RUNNING" | "COMPLETED" | "FAILED" | "INVALIDATED";
 
@@ -33,6 +35,22 @@ export function registerExperiment(input: RegisterExperimentInput, now: () => Da
 
 export function transitionExperiment(record: ExperimentRecord, status: ExperimentStatus): ExperimentRecord {
   return { ...record, status };
+}
+
+export function parseExperimentRegistry(text: string): ExperimentRecord[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as ExperimentRecord);
+}
+
+export function registryHasExperiment(records: ExperimentRecord[], experimentId: string): boolean {
+  return records.some((record) => record.experimentId === experimentId);
+}
+
+export function countFamilyExperiments(records: ExperimentRecord[], familyId: string): number {
+  return new Set(records.filter((record) => record.familyId === familyId).map((record) => record.experimentId)).size;
 }
 
 export type ExperimentArtifact = {
@@ -85,8 +103,19 @@ export function buildExperimentArtifactsFromReport(input: {
   controls?: Record<string, unknown>;
   runtime: { startedAt: string; finishedAt: string };
   protocolHash: string;
+  protocolLock?: ProtocolLock | null;
+  latestDrawId?: string | null;
 }): ExperimentArtifact[] {
-  const { report, datasetSha256, gitCommit, seed, experimentIdFor, controls = {}, runtime, protocolHash } = input;
+  const { report, datasetSha256, gitCommit, seed, experimentIdFor, runtime, protocolHash } = input;
+  const protocolLock = input.protocolLock ?? null;
+  const latestDrawId = input.latestDrawId ?? null;
+  const controls = {
+    primaryEndpoint: PRIMARY_ENDPOINT.id,
+    expectedMatches: EXPECTED_MATCHES,
+    protocolLock,
+    latestDrawEvidence: protocolLock && latestDrawId ? classifyEvidence(latestDrawId, protocolLock) : null,
+    ...input.controls,
+  };
   const strategies = [...new Set(report.results.map((r) => r.strategy))].filter((s) => s !== "RANDOM");
 
   return strategies.map((strategy) => {

@@ -1,4 +1,4 @@
-import { MEGA_645, evaluateTicket, validateNumbers } from "./mega645";
+import { MEGA_645, evaluateTicket } from "./mega645";
 
 export type DrawRecord = {
   date: string;
@@ -121,29 +121,14 @@ export type TemporalBacktestReport = {
   multipleTestingMethod: "Holm-Bonferroni";
   selectionRule: string;
   protocolVersion: string;
+  /** Holm family size: registry family when provided, otherwise the visible non-RANDOM set. */
+  familySize: number;
   /** Null when validation produced no strategy that clears the bar. */
   candidate: SelectedCandidate | null;
   phases: EvaluationPhase[];
   results: PhaseBacktestResult[];
   reliability: StrategyReliability[];
 };
-
-export function parseDraws(text: string): DrawRecord[] {
-  const draws = text
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as DrawRecord)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const ids = new Set<string>();
-  draws.forEach((draw) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(draw.date) || !draw.id || !validateNumbers(draw.result) || ids.has(draw.id)) {
-      throw new Error("Dữ liệu kỳ quay không hợp lệ hoặc bị trùng.");
-    }
-    ids.add(draw.id);
-  });
-  return draws;
-}
 
 export function filterByWindow(draws: DrawRecord[], windowId: WindowId): DrawRecord[] {
   if (windowId === "ALL" || draws.length === 0) return draws;
@@ -253,14 +238,18 @@ function oneSidedPValue(zScore: number): number {
   return Math.max(0, Math.min(1, 1 - normalCdf(zScore)));
 }
 
-function holmBonferroni<T extends { pValue: number }>(items: T[]): Array<T & { adjustedPValue: number }> {
+export function holmBonferroni<T extends { pValue: number }>(
+  items: T[],
+  familySize = items.length,
+): Array<T & { adjustedPValue: number }> {
+  const n = Math.max(familySize, items.length);
   const ordered = items
     .map((item, index) => ({ ...item, originalIndex: index }))
     .sort((a, b) => a.pValue - b.pValue);
   const adjusted = Array(items.length).fill(1) as number[];
   let runningMax = 0;
   ordered.forEach((item, rank) => {
-    runningMax = Math.max(runningMax, Math.min(1, item.pValue * (items.length - rank)));
+    runningMax = Math.max(runningMax, Math.min(1, item.pValue * (n - rank)));
     adjusted[item.originalIndex] = runningMax;
   });
   return items.map((item, index) => ({ ...item, adjustedPValue: adjusted[index] }));
@@ -430,7 +419,12 @@ export function selectCandidate(
   };
 }
 
-export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, alpha = 0.05): TemporalBacktestReport {
+export function runTemporalBacktestReport(
+  draws: DrawRecord[],
+  lookback = 90,
+  alpha = 0.05,
+  familySize?: number,
+): TemporalBacktestReport {
   const series = buildWalkForwardSeries(draws, lookback);
   if (!series) {
     return {
@@ -439,6 +433,7 @@ export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, al
       multipleTestingMethod: "Holm-Bonferroni",
       selectionRule: SELECTION_RULE,
       protocolVersion: PROTOCOL_VERSION,
+      familySize: familySize ?? 0,
       candidate: null,
       phases: [],
       results: [],
@@ -452,9 +447,15 @@ export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, al
     strategyIds.map((strategy) => summarizePhase(series, strategy, phase, phase.start, phase.end)),
   );
 
+  const visibleFamily = results.filter((result) => result.phase === phasesWithBounds[0]?.id && result.strategy !== "RANDOM").length;
+  const resolvedFamilySize = familySize ?? visibleFamily;
+
   for (const phase of phasesWithBounds) {
     const phaseResults = results.filter((result) => result.phase === phase.id && result.strategy !== "RANDOM");
-    const adjusted = holmBonferroni(phaseResults.map((result) => ({ strategy: result.strategy, pValue: result.pValueVsRandom })));
+    const adjusted = holmBonferroni(
+      phaseResults.map((result) => ({ strategy: result.strategy, pValue: result.pValueVsRandom })),
+      resolvedFamilySize,
+    );
     adjusted.forEach((item) => {
       const result = results.find((candidate) => candidate.phase === phase.id && candidate.strategy === item.strategy);
       if (result) {
@@ -492,6 +493,7 @@ export function runTemporalBacktestReport(draws: DrawRecord[], lookback = 90, al
     multipleTestingMethod: "Holm-Bonferroni",
     selectionRule: SELECTION_RULE,
     protocolVersion: PROTOCOL_VERSION,
+    familySize: resolvedFamilySize,
     candidate,
     phases: phasesWithBounds.map((phase) => ({
       id: phase.id,

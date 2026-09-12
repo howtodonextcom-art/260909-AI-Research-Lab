@@ -5,19 +5,19 @@ import {
   DATA_REFRESH_TTL_MS,
   loadDataset,
   refreshDataset,
+  resetDatasetCache,
   shouldAutoRefresh,
   type DatasetOrigin,
   type LoadedDataset,
 } from "@/lib/data/refresh";
+import {
+  REFRESH_ERROR_MESSAGE,
+  refreshStateFromSummary,
+  type RefreshUiState,
+} from "@/lib/data/draw-data-state";
 import type { DrawRecord, DatasetManifest } from "@/lib/data/types";
 
-export type RefreshState =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | { kind: "updated"; added: number; total: number; latestDate: string | null }
-  | { kind: "up-to-date" }
-  | { kind: "conflict"; count: number; message: string }
-  | { kind: "error"; message: string };
+export type RefreshState = RefreshUiState;
 
 export type DrawDataState = {
   records: DrawRecord[];
@@ -29,6 +29,7 @@ export type DrawDataState = {
   /** True while a network check is in flight, for disabling the button. */
   busy: boolean;
   update: () => void;
+  resetCache: () => void;
 };
 
 /**
@@ -72,45 +73,17 @@ export function useDrawData(): DrawDataState {
       const summary = await refreshDataset(current, { signal: options.signal });
       if (!mountedRef.current) return;
 
-      // Nothing new upstream: the rendered dataset is already correct.
-      if (summary.status === "not-modified" || (summary.status === "ok" && summary.added === 0)) {
-        setRefresh({ kind: "up-to-date" });
-        return;
-      }
-
-      if (summary.status === "ok") {
+      const nextState = refreshStateFromSummary(summary);
+      if (nextState.kind === "updated") {
         const next = await loadDataset(options.signal);
         if (!mountedRef.current) return;
         datasetRef.current = next;
         setDataset(next);
-        setRefresh({
-          kind: "updated",
-          added: summary.added,
-          total: summary.totalAfterMerge,
-          latestDate: summary.latestDrawDate,
-        });
-        return;
       }
-
-      if (summary.conflicts > 0) {
-        setRefresh({
-          kind: "conflict",
-          count: summary.conflicts,
-          message: "Nguồn trả về kết quả khác với dữ liệu đang lưu. Dữ liệu cũ được giữ nguyên.",
-        });
-        return;
-      }
-
-      setRefresh({
-        kind: "error",
-        message: "Không thể cập nhật lúc này. Ứng dụng đang sử dụng bộ dữ liệu hợp lệ gần nhất.",
-      });
+      setRefresh(nextState);
     } catch {
       if (mountedRef.current) {
-        setRefresh({
-          kind: "error",
-          message: "Không thể cập nhật lúc này. Ứng dụng đang sử dụng bộ dữ liệu hợp lệ gần nhất.",
-        });
+        setRefresh({ kind: "error", message: REFRESH_ERROR_MESSAGE });
       }
     } finally {
       busyRef.current = false;
@@ -146,6 +119,31 @@ export function useDrawData(): DrawDataState {
     void runRefresh();
   }, [runRefresh]);
 
+  const resetCache = useCallback(() => {
+    if (busyRef.current) return;
+    void (async () => {
+      busyRef.current = true;
+      if (mountedRef.current) setBusy(true);
+      try {
+        const next = await resetDatasetCache();
+        if (!mountedRef.current) return;
+        datasetRef.current = next;
+        setDataset(next);
+        setRefresh({ kind: "idle" });
+      } catch (error) {
+        if (mountedRef.current) {
+          setRefresh({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Không thể xoá cache dữ liệu lúc này.",
+          });
+        }
+      } finally {
+        busyRef.current = false;
+        if (mountedRef.current) setBusy(false);
+      }
+    })();
+  }, []);
+
   return {
     records: dataset?.records ?? [],
     manifest: dataset?.manifest ?? null,
@@ -155,5 +153,6 @@ export function useDrawData(): DrawDataState {
     refresh,
     busy,
     update,
+    resetCache,
   };
 }

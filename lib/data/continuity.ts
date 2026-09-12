@@ -18,7 +18,7 @@ export type ContinuityReport = {
   firstId: string | null;
   latestId: string | null;
   recordCount: number;
-  /** `null` for an empty dataset; otherwise latestId - firstId + 1 (ids only, ignores duplicates). */
+  /** `null` for an empty dataset (also `continuous: false`); otherwise latestId - firstId + 1. */
   expectedCount: number | null;
   missingIds: string[];
   duplicateIds: string[];
@@ -34,7 +34,7 @@ export function analyzeContinuity(records: DrawRecord[]): ContinuityReport {
       expectedCount: null,
       missingIds: [],
       duplicateIds: [],
-      continuous: true,
+      continuous: false,
     };
   }
 

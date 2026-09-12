@@ -13,8 +13,8 @@
  */
 import { fileURLToPath } from "node:url";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
-import { vietlottOfficialAdapter, OfficialFetchError, OfficialParseError, fetchOfficialDraw } from "../lib/data/sources/vietlott-official";
-import { HttpError } from "../lib/data/http";
+import { vietlottOfficialAdapter, OfficialParseError, fetchOfficialDraw } from "../lib/data/sources/vietlott-official";
+import { isNetworkUnreachable } from "../lib/data/live-verification";
 import { runCrossCheck } from "../lib/data/cross-check";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -26,13 +26,6 @@ console.log(`  Thời điểm:   ${new Date().toISOString()}`);
 
 const snapshot = await loadSnapshot(paths);
 console.log(`  Local:       ${snapshot.records.length} kỳ, mới nhất ${snapshot.records.at(-1)?.date ?? "—"} (#${snapshot.records.at(-1)?.id ?? "—"})`);
-
-function isNetworkUnreachable(error: unknown): boolean {
-  if (error instanceof OfficialParseError) return false; // the site answered; the markup just doesn't match — a real finding.
-  if (error instanceof OfficialFetchError) return false; // the site answered with a malformed/erroring payload — a real finding.
-  if (error instanceof HttpError) return error.status === null; // null status means the request never got an HTTP response at all.
-  return true; // anything else (DNS, TLS, abort) is presumed a connectivity problem.
-}
 
 let response;
 try {

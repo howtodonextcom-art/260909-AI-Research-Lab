@@ -6,13 +6,14 @@ import {
   calculateFrequency,
   createStrategyPick,
   filterByWindow,
-  parseDraws,
   runTemporalBacktestReport,
   runWalkForwardBacktest,
   selectCandidate,
   type DrawRecord,
   type PhaseBacktestResult,
 } from "./analytics.ts";
+import { parseDrawsJsonl } from "./data/jsonl.ts";
+import { validateDataset } from "./data/merge.ts";
 import { validateNumbers } from "./mega645.ts";
 
 const draws: DrawRecord[] = Array.from({ length: 120 }, (_, index) => ({
@@ -21,14 +22,16 @@ const draws: DrawRecord[] = Array.from({ length: 120 }, (_, index) => ({
   result: Array.from({ length: 6 }, (__, offset) => ((index + offset) % 45) + 1).sort((a, b) => a - b),
 }));
 
-test("parseDraws sắp xếp dữ liệu theo ngày", () => {
-  const parsed = parseDraws('{"date":"2025-01-02","id":"2","result":[1,2,3,4,5,6]}\n{"date":"2025-01-01","id":"1","result":[7,8,9,10,11,12]}');
-  assert.equal(parsed[0].id, "1");
+test("parseDrawsJsonl sắp xếp dữ liệu theo ngày", () => {
+  const parsed = parseDrawsJsonl('{"date":"2025-01-02","id":"00002","result":[1,2,3,4,5,6]}\n{"date":"2025-01-01","id":"00001","result":[7,8,9,10,11,12]}');
+  assert.equal(parsed.issues.length, 0);
+  assert.equal(parsed.records[0].id, "00001");
 });
 
-test("parseDraws từ chối bản ghi sai hoặc trùng kỳ", () => {
-  assert.throws(() => parseDraws('{"date":"2025-01-01","id":"1","result":[1,1,2,3,4,5]}'));
-  assert.throws(() => parseDraws('{"date":"2025-01-01","id":"1","result":[1,2,3,4,5,6]}\n{"date":"2025-01-02","id":"1","result":[7,8,9,10,11,12]}'));
+test("parseDrawsJsonl báo lỗi bản ghi sai hoặc trùng kỳ", () => {
+  assert.equal(parseDrawsJsonl('{"date":"2025-01-01","id":"00001","result":[1,1,2,3,4,5]}').issues.length, 1);
+  const duplicate = parseDrawsJsonl('{"date":"2025-01-01","id":"00001","result":[1,2,3,4,5,6]}\n{"date":"2025-01-02","id":"00001","result":[7,8,9,10,11,12]}');
+  assert.equal(validateDataset(duplicate.records).valid, false);
 });
 
 test("lọc đúng cửa sổ 30 ngày tính từ kỳ mới nhất", () => {
@@ -117,6 +120,18 @@ test("ứng viên chỉ đến từ validation và phải vượt ngưỡng alph
   const picked = selectCandidate([make("HOT", 0.05, 0.04), make("COLD", 0.09, 0.01)], 0.05);
   assert.equal(picked?.strategy, "COLD", "chọn adjusted p-value nhỏ nhất");
   assert.equal(picked?.protocolVersion, PROTOCOL_VERSION, "ứng viên phải ghi lại phiên bản protocol");
+
+  assert.equal(
+    selectCandidate([make("RANDOM", 0.5, 0.001), make("HOT", 0.05, 0.04)], 0.05)?.strategy,
+    "HOT",
+    "RANDOM không được chọn dù p đẹp",
+  );
+  assert.equal(
+    selectCandidate([make("HOT", 0.05, 0.04), make("COLD", 0.09, 0.04)], 0.05)?.strategy,
+    "COLD",
+    "cùng adjusted p thì chọn edge lớn hơn",
+  );
+  assert.equal(selectCandidate([make("HOT", 0.05, 0.05)], 0.05)?.strategy, "HOT", "adjusted p đúng bằng alpha vẫn đủ điều kiện");
 });
 
 test("không chiến lược nào được gắn nhãn xác nhận trên dữ liệu tổng hợp", () => {
@@ -144,4 +159,23 @@ test("kết quả backtest báo cáo cổng sàng lọc thay vì verdict không 
 
   const control = results.find((result) => result.strategy === "RANDOM")!;
   assert.equal(control.gates.passedCount, 0, "mốc đối chứng không tự vượt cổng của chính nó");
+  assert.equal(control.gates.significant, false);
+  assert.equal(control.gates.stableAcrossHalves, false);
+  assert.equal(control.gates.outperformsRandomPayout, false);
+
+  for (const result of results.filter((row) => row.strategy !== "RANDOM")) {
+    assert.equal(typeof result.gates.significant, "boolean");
+    assert.equal(typeof result.gates.stableAcrossHalves, "boolean");
+    assert.equal(typeof result.gates.outperformsRandomPayout, "boolean");
+  }
+});
+
+test("Holm dùng familySize lớn hơn số chiến lược đang thấy thì conservative hơn", () => {
+  const visible = runTemporalBacktestReport(draws, 90, 0.05, 3);
+  const family = runTemporalBacktestReport(draws, 90, 0.05, 10);
+  assert.equal(visible.familySize, 3);
+  assert.equal(family.familySize, 10);
+  const visibleHot = visible.results.find((result) => result.phase === "VALIDATION" && result.strategy === "HOT")!;
+  const familyHot = family.results.find((result) => result.phase === "VALIDATION" && result.strategy === "HOT")!;
+  assert.ok((familyHot.adjustedPValue ?? 1) >= (visibleHot.adjustedPValue ?? 1));
 });

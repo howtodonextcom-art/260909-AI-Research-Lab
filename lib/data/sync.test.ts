@@ -313,6 +313,30 @@ test("loadSnapshot từ chối file local hỏng", async () => {
   await assert.rejects(() => loadSnapshot(paths), /Snapshot local hỏng/);
 });
 
+test("dataset sau merge bị đứt kỳ thì fail-closed, không ghi", async () => {
+  const gapped = [BASE[0], BASE[2]];
+  const adapter = new FakeAdapter(() => ({ raw: rowsOf(gapped), etag: 'W/"etag-gap"' }));
+  const { deps, store } = makeDeps(adapter, { records: [], manifest: null });
+
+  const summary = await runSync(deps);
+
+  assert.equal(summary.status, "failed");
+  assert.match(summary.error ?? "", /không liên tục|Dataset rỗng/);
+  assert.equal(store.savedSnapshots, 0);
+});
+
+test("--allow-gaps cho phép ghi snapshot đứt kỳ", async () => {
+  const gapped = [BASE[0], BASE[2]];
+  const adapter = new FakeAdapter(() => ({ raw: rowsOf(gapped), etag: 'W/"etag-gap"' }));
+  const { deps, store } = makeDeps(adapter, { records: [], manifest: null });
+
+  const summary = await runSync(deps, { allowGaps: true });
+
+  assert.equal(summary.status, "ok");
+  assert.equal(store.savedSnapshots, 1);
+  assert.equal(store.state.records.length, 2);
+});
+
 test("manifest được tính từ dữ liệu, không hard-code", async () => {
   const manifest = await buildManifest({
     records: BASE,

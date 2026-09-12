@@ -7,7 +7,7 @@ function draw(id: string, date: string): DrawRecord {
   return { id, date, result: [1, 2, 3, 4, 5, 6] };
 }
 
-test("dataset rỗng: continuous = true, không có gì để báo", () => {
+test("dataset rỗng: continuous = false, không có gì để báo", () => {
   const report = analyzeContinuity([]);
   assert.deepEqual(report, {
     firstId: null,
@@ -16,7 +16,7 @@ test("dataset rỗng: continuous = true, không có gì để báo", () => {
     expectedCount: null,
     missingIds: [],
     duplicateIds: [],
-    continuous: true,
+    continuous: false,
   });
 });
 

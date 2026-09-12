@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { AlertTriangle, Check, CloudDownload, Database, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, Check, CloudDownload, Database, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DrawDataState } from "@/hooks/use-draw-data";
 import { analyzeContinuity } from "@/lib/data/continuity";
 import { CURRENT_PROTOCOL } from "@/lib/research/protocol";
+import { EXPECTED_MATCHES, PRIMARY_ENDPOINT } from "@/lib/research/statistics";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -146,6 +147,14 @@ export function DataStatus({ state }: { state: DrawDataState }) {
           <dt>Phiên bản giao thức nghiên cứu</dt>
           <dd>{CURRENT_PROTOCOL.version}</dd>
         </div>
+        <div>
+          <dt>Endpoint chính</dt>
+          <dd>{PRIMARY_ENDPOINT.id}</dd>
+        </div>
+        <div>
+          <dt>Kỳ vọng số trùng (null)</dt>
+          <dd>{EXPECTED_MATCHES.toFixed(1)}</dd>
+        </div>
       </dl>
 
       <div className="data-status-actions">
@@ -158,6 +167,16 @@ export function DataStatus({ state }: { state: DrawDataState }) {
         >
           {state.busy ? <Loader2 className="spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
           {state.busy ? "Đang cập nhật…" : "Cập nhật dữ liệu"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="secondary-action"
+          onClick={state.resetCache}
+          disabled={state.busy || state.loading || state.origin !== "cache"}
+        >
+          <Trash2 aria-hidden="true" />
+          Xóa cache
         </Button>
         <span className="data-status-note">
           <CloudDownload aria-hidden="true" /> Bản cập nhật được lưu trên thiết bị này, không gửi lên máy chủ.

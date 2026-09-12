@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Copy, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { calculatePortfolioOdds, countCoveredPairs, optimizePortfolio } from "@/lib/portfolio";
+import { calculatePortfolioOdds, copyTickets, countCoveredPairs, optimizePortfolio } from "@/lib/portfolio";
 import { formatBall, formatVnd } from "@/lib/mega645";
 
 function percent(value: number) {
@@ -21,10 +21,9 @@ export function PortfolioLab() {
   const portfolio = useMemo(() => optimizePortfolio(ticketCount, seed), [ticketCount, seed]);
   const odds = calculatePortfolioOdds(ticketCount);
 
-  const copyTickets = async () => {
-    const text = portfolio.map((ticket, index) => `${String(index + 1).padStart(2, "0")}: ${ticket.map(formatBall).join(" ")}`).join("\n");
+  const handleCopyTickets = async () => {
     try {
-      await navigator.clipboard?.writeText(text);
+      await copyTickets(portfolio, (text) => navigator.clipboard.writeText(text));
     } catch {
       // Clipboard permissions can be denied in local previews; the portfolio remains usable on screen.
     }
@@ -58,7 +57,7 @@ export function PortfolioLab() {
     </section>
 
     <section className="analysis-card">
-      <div className="section-heading"><div><p className="eyebrow">Bộ vé đã tối ưu</p><h2>{ticketCount} vé không chồng vùng giải lớn</h2></div><Button variant="outline" onClick={copyTickets}><Copy /> Sao chép</Button></div>
+      <div className="section-heading"><div><p className="eyebrow">Bộ vé đã tối ưu</p><h2>{ticketCount} vé không chồng vùng giải lớn</h2></div><Button variant="outline" onClick={handleCopyTickets}><Copy /> Sao chép</Button></div>
       <div className="portfolio-tickets">{portfolio.map((ticket, index) => <div className="portfolio-ticket" key={index}><span>Vé {String(index + 1).padStart(2, "0")}</span><div>{ticket.map(number => <b key={number}>{formatBall(number)}</b>)}</div></div>)}</div>
     </section>
 

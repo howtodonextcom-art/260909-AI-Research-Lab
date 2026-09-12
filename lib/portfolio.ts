@@ -1,4 +1,4 @@
-import { MEGA_645, validateNumbers } from "./mega645";
+import { MEGA_645, formatBall, validateNumbers } from "./mega645";
 import { choose, outcomes } from "./profit";
 
 /**
@@ -130,6 +130,21 @@ export function calculatePortfolioOdds(ticketCount: number): PortfolioOdds {
     exactProbabilityAtLeast5: ticketCount * single5,
     exactProbabilityJackpot: ticketCount / total,
   };
+}
+
+export function formatPortfolioTickets(tickets: number[][]): string {
+  return tickets
+    .map((ticket, index) => `${String(index + 1).padStart(2, "0")}: ${ticket.map(formatBall).join(" ")}`)
+    .join("\n");
+}
+
+export async function copyTickets(
+  tickets: number[][],
+  writeText: (text: string) => Promise<void>,
+): Promise<string> {
+  const text = formatPortfolioTickets(tickets);
+  await writeText(text);
+  return text;
 }
 
 export function countCoveredPairs(tickets: number[][]): number {

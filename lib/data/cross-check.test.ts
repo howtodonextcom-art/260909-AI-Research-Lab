@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runCrossCheck, selectDeterministicSampleIds } from "./cross-check";
+import { compareIdSets, runCrossCheck, selectDeterministicSampleIds } from "./cross-check";
 import type { DrawRecord } from "./types";
 
 function draws(n: number): DrawRecord[] {
@@ -107,4 +107,33 @@ test("runCrossCheck: mirror không khả dụng (null) không tự sinh mismatch
 test("runCrossCheck: dataset rỗng → EMPTY", async () => {
   const report = await runCrossCheck({ localRecords: [], mirrorRecords: [], fetchDetail: async () => ({}) });
   assert.equal(report.status, "EMPTY");
+});
+
+test("compareIdSets: official vs mirror — chỉ local / chỉ mirror / chung", () => {
+  const local = draws(5);
+  const mirror = [...local.slice(0, 4), { id: "00099", date: "2020-02-01", result: [1, 2, 3, 4, 5, 6] }];
+  const compare = compareIdSets(local, mirror);
+  assert.equal(compare.compared, true);
+  assert.deepEqual(compare.onlyLocal, ["00005"]);
+  assert.deepEqual(compare.onlyMirror, ["00099"]);
+  assert.equal(compare.sharedCount, 4);
+});
+
+test("compareIdSets: mirror null thì không đối chiếu tập id", () => {
+  const compare = compareIdSets(draws(3), null);
+  assert.equal(compare.compared, false);
+  assert.deepEqual(compare.onlyLocal, []);
+  assert.deepEqual(compare.onlyMirror, []);
+});
+
+test("runCrossCheck gắn idSet vào báo cáo", async () => {
+  const local = draws(10);
+  const report = await runCrossCheck({
+    localRecords: local,
+    mirrorRecords: local,
+    extraSampleSize: 1,
+    fetchDetail: async (id) => local.find((r) => r.id === id)!,
+  });
+  assert.equal(report.idSet.compared, true);
+  assert.equal(report.idSet.sharedCount, 10);
 });

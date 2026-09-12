@@ -9,6 +9,7 @@
  * merged dataset has passed validation. Any earlier failure returns
  * `status: "failed"` and leaves the previous snapshot exactly as it was.
  */
+import { analyzeContinuity } from "./continuity";
 import { buildManifest } from "./manifest";
 import { mergeDraws, validateDataset } from "./merge";
 import { serializeDrawsJsonl } from "./jsonl";
@@ -40,6 +41,8 @@ export type SyncDeps = {
 export type SyncOptions = {
   /** Ignores the stored ETag and re-fetches the whole snapshot. */
   force?: boolean;
+  /** Permit writing a snapshot that `analyzeContinuity` reports as gapped. */
+  allowGaps?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -170,6 +173,20 @@ export async function runSync(deps: SyncDeps, options: SyncOptions = {}): Promis
 
   if (merged.conflicts.length) {
     summary.error = conflictMessage(merged.conflicts);
+    summary.totalAfterMerge = snapshot.records.length;
+    summary.firstDrawDate = snapshot.records[0]?.date ?? null;
+    summary.latestDrawDate = previousLatest;
+    summary.datasetHash = previousManifest?.datasetSha256 ?? "";
+    await recordAttempt(deps, snapshot, previousManifest, attemptedAt);
+    return summary;
+  }
+
+  const continuity = analyzeContinuity(merged.records);
+  if (!continuity.continuous && !options.allowGaps) {
+    summary.error =
+      merged.records.length === 0
+        ? "Dataset rỗng (continuous=false); không ghi snapshot."
+        : `Dữ liệu không liên tục: thiếu ${continuity.missingIds.length} kỳ, trùng ${continuity.duplicateIds.length}; không ghi. Dùng --allow-gaps nếu chủ đích.`;
     summary.totalAfterMerge = snapshot.records.length;
     summary.firstDrawDate = snapshot.records[0]?.date ?? null;
     summary.latestDrawDate = previousLatest;

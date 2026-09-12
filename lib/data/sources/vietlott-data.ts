@@ -1,5 +1,5 @@
 /**
- * Primary source: the vietvudanh/vietlott-data mirror (MIT licensed).
+ * Secondary source: the vietvudanh/vietlott-data mirror (MIT licensed).
  *
  * Verified characteristics as of this implementation:
  *  - serves `Access-Control-Allow-Origin: *`, so the browser can fetch it
@@ -9,7 +9,9 @@
  *    (the repository's own naming; the product is Vietlott Mega 6/45).
  *
  * The whole file is a single snapshot with no pagination, so `fetchSince`
- * differs from `fetchAll` only by sending a conditional request.
+ * differs from `fetchAll` only by sending a conditional request. The product
+ * uses this adapter for cross-checking only; authoritative sync is the
+ * official Vietlott adapter.
  */
 import { fetchGuarded } from "../http";
 import { parseJsonlRows } from "../jsonl";
@@ -32,13 +34,6 @@ const MIN_PLAUSIBLE_ROWS = 100;
 
 export type VietlottAdapterOptions = {
   url?: string;
-  /**
-   * Set for browser use. Suppresses the conditional-request headers that would
-   * otherwise trigger a CORS preflight the source cannot answer; see the note
-   * on `fetchGuarded`. The cost is that the browser re-downloads ~150 KB
-   * instead of receiving a 304, and detects "nothing new" from `added === 0`.
-   */
-  avoidPreflight?: boolean;
 };
 
 export class VietlottDataAdapter implements DrawSourceAdapter {
@@ -46,11 +41,9 @@ export class VietlottDataAdapter implements DrawSourceAdapter {
   readonly sourceUrl = VIETLOTT_DATA_URL;
   readonly license = VIETLOTT_DATA_SOURCE.license;
   private readonly url: string;
-  private readonly avoidPreflight: boolean;
 
-  constructor({ url = VIETLOTT_DATA_URL, avoidPreflight = false }: VietlottAdapterOptions = {}) {
+  constructor({ url = VIETLOTT_DATA_URL }: VietlottAdapterOptions = {}) {
     this.url = url;
-    this.avoidPreflight = avoidPreflight;
   }
 
   async fetchAll(options: FetchOptions = {}): Promise<SourceResponse> {
@@ -58,7 +51,7 @@ export class VietlottDataAdapter implements DrawSourceAdapter {
   }
 
   async fetchSince(cursor: SyncCursor, options: FetchOptions = {}): Promise<SourceResponse> {
-    return this.load(this.avoidPreflight ? null : cursor.etag, options);
+    return this.load(cursor.etag, options);
   }
 
   normalize(raw: RawDraw): NormalizeOutcome {
@@ -69,7 +62,6 @@ export class VietlottDataAdapter implements DrawSourceAdapter {
     const response = await fetchGuarded(this.url, {
       ...options,
       etag,
-      avoidPreflight: this.avoidPreflight,
     });
     if (response.text === null) {
       return { raw: null, etag: response.etag };
@@ -89,6 +81,3 @@ export class VietlottDataAdapter implements DrawSourceAdapter {
 
 /** Node/CLI: conditional requests are available and cheap. */
 export const vietlottDataAdapter = new VietlottDataAdapter();
-
-/** Browser: plain GET only, to stay inside what the source's CORS support allows. */
-export const browserVietlottDataAdapter = new VietlottDataAdapter({ avoidPreflight: true });

@@ -11,9 +11,7 @@
  * caller to steer.
  */
 import { parseDrawsJsonl } from "./jsonl";
-import { readCache, writeCache, writeCachedManifest } from "./browser-cache";
-import { runSync, type SnapshotState } from "./sync";
-import { browserVietlottDataAdapter } from "./sources/vietlott-data";
+import { clearCache, readCache, writeCache, writeCachedManifest } from "./browser-cache";
 import type { DatasetManifest, DrawRecord, SyncSummary } from "./types";
 
 /** Single place the freshness window is defined. */
@@ -21,6 +19,7 @@ export const DATA_REFRESH_TTL_MS = 12 * 60 * 60 * 1000;
 
 export const BUNDLED_SNAPSHOT_URL = "/data/power645.jsonl";
 export const BUNDLED_MANIFEST_URL = "/data/power645.manifest.json";
+export const REFRESH_API_URL = "/api/data/refresh";
 
 export type DatasetOrigin = "bundled" | "cache";
 
@@ -96,7 +95,18 @@ export async function loadDataset(signal?: AbortSignal): Promise<LoadedDataset> 
   return pickBestSnapshot(bundled, cached);
 }
 
+export async function resetDatasetCache(signal?: AbortSignal): Promise<LoadedDataset> {
+  await clearCache();
+  return fetchBundled(signal);
+}
+
 let inFlight: Promise<SyncSummary> | null = null;
+
+type RefreshApiResponse = {
+  summary: SyncSummary;
+  records?: DrawRecord[];
+  manifest?: DatasetManifest;
+};
 
 /**
  * Fetches upstream and merges into the cached dataset.
@@ -106,21 +116,27 @@ let inFlight: Promise<SyncSummary> | null = null;
 export function refreshDataset(current: LoadedDataset, options: { force?: boolean; signal?: AbortSignal } = {}): Promise<SyncSummary> {
   if (inFlight) return inFlight;
 
-  const snapshot: SnapshotState = { records: current.records, manifest: current.manifest };
-  inFlight = runSync(
-    {
-      adapter: browserVietlottDataAdapter,
-      loadSnapshot: async () => snapshot,
-      saveSnapshot: async (records, manifest) => {
-        await writeCache(records, manifest);
-      },
-      saveManifest: async (manifest) => {
-        await writeCachedManifest(manifest);
-      },
-      now: () => new Date(),
-    },
-    { force: options.force, signal: options.signal },
-  ).finally(() => {
+  inFlight = fetch(REFRESH_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify({
+      force: Boolean(options.force),
+      records: current.records,
+      manifest: current.manifest,
+    }),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Không gọi được dịch vụ cập nhật dữ liệu (HTTP ${response.status}).`);
+      const payload = (await response.json()) as RefreshApiResponse;
+      if (payload.records && payload.manifest) {
+        await writeCache(payload.records, payload.manifest);
+      } else if (payload.manifest) {
+        await writeCachedManifest(payload.manifest);
+      }
+      return payload.summary;
+    })
+    .finally(() => {
     inFlight = null;
   });
 

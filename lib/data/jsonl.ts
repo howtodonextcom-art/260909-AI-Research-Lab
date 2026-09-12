@@ -18,6 +18,11 @@ export type ParseOutcome = {
   fetched: number;
 };
 
+/** Compare on-disk JSONL after mapping CRLF to LF so Windows checkouts stay canonical. */
+export function canonicalizeNewlines(text: string): string {
+  return text.replace(/\r\n/g, "\n");
+}
+
 /** Splits JSONL into raw rows, reporting malformed lines instead of throwing. */
 export function parseJsonlRows(text: string): { rows: RawDraw[]; issues: ValidationIssue[] } {
   const rows: RawDraw[] = [];

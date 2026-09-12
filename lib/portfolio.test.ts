@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculatePortfolioOdds, countCoveredPairs, intersectionSize, optimizePortfolio, validatePortfolio } from "./portfolio";
+import { calculatePortfolioOdds, copyTickets, countCoveredPairs, formatPortfolioTickets, intersectionSize, optimizePortfolio, validatePortfolio } from "./portfolio";
 
 test("optimizer tạo portfolio hợp lệ và lặp lại được", () => {
   for (const count of [1, 5, 10, 20, 30]) {
@@ -31,4 +31,22 @@ test("xác suất portfolio tăng tuyến tính nhưng không đổi xác suất
 
 test("từ chối số vé ngoài giới hạn", () => {
   for (const count of [0, 31, -1, 1.5]) assert.throws(() => optimizePortfolio(count));
+});
+
+test("seed khác nhau sinh portfolio khác nhau", () => {
+  const left = optimizePortfolio(10, 1);
+  const right = optimizePortfolio(10, 2);
+  assert.notDeepEqual(left, right);
+});
+
+test("copyTickets ghi đúng chuỗi đã format qua clipboard giả", async () => {
+  const portfolio = optimizePortfolio(3, 645);
+  const writes: string[] = [];
+  const text = await copyTickets(portfolio, async (value) => {
+    writes.push(value);
+  });
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0], formatPortfolioTickets(portfolio));
+  assert.equal(text, writes[0]);
+  assert.match(text, /^01: \d{2} \d{2} \d{2} \d{2} \d{2} \d{2}/);
 });

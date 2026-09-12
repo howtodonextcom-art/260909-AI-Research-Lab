@@ -8,7 +8,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
-import { serializeDrawsJsonl } from "../lib/data/jsonl";
+import { canonicalizeNewlines, serializeDrawsJsonl } from "../lib/data/jsonl";
 import { validateDataset } from "../lib/data/merge";
 import { sha256Hex } from "../lib/data/hash";
 
@@ -62,7 +62,7 @@ if (!snapshot.manifest) {
 
 // The bundled file must already be canonical, otherwise the browser and the
 // CLI would disagree about the hash of identical data.
-const onDisk = await readFile(paths.snapshot, "utf8");
+const onDisk = canonicalizeNewlines(await readFile(paths.snapshot, "utf8"));
 if (onDisk !== serialized) {
   failures.push("file trên đĩa chưa ở dạng canonical (chạy npm run data:sync để chuẩn hoá)");
 } else {
