@@ -53,6 +53,97 @@ export function countFamilyExperiments(records: ExperimentRecord[], familyId: st
   return new Set(records.filter((record) => record.familyId === familyId).map((record) => record.experimentId)).size;
 }
 
+function hypothesisKey(record: ExperimentRecord): string | null {
+  if (typeof record.hypothesisId === "string" && record.hypothesisId.length > 0) return record.hypothesisId;
+  if (typeof record.strategyId === "string" && record.strategyId.length > 0) return record.strategyId;
+  return null;
+}
+
+/** Distinct hypotheses in a family — the Holm denominator. Does not grow with new looks. */
+export function countFamilyHypotheses(records: ExperimentRecord[], familyId: string): number {
+  return new Set(
+    records
+      .filter((record) => record.familyId === familyId)
+      .map(hypothesisKey)
+      .filter((key): key is string => Boolean(key)),
+  ).size;
+}
+
+/** Distinct dataset hashes in a family. `extraDatasetHash` counts the look about to be registered. */
+export function countFamilyLooks(records: ExperimentRecord[], familyId: string, extraDatasetHash?: string): number {
+  const hashes = records
+    .filter((record) => record.familyId === familyId)
+    .map((record) => record.datasetHash)
+    .filter((hash): hash is string => typeof hash === "string" && hash.length > 0);
+  if (extraDatasetHash && extraDatasetHash.length > 0) hashes.push(extraDatasetHash);
+  return new Set(hashes).size;
+}
+
+/** Same family id `run-experiment.ts` writes; Holm must count this family, not `CURRENT_PROTOCOL.strategies`. */
+export function primaryStrategyFamilyId(protocolVersion: string): string {
+  return `protocol-${protocolVersion}-primary-strategies`;
+}
+
+/** Visible non-RANDOM protocol set size — only used when the registry family is empty. */
+export const FALLBACK_HOLM_FAMILY_SIZE = 3;
+
+export function resolveHolmFamilySize(
+  records: ExperimentRecord[],
+  familyId: string,
+  fallback = FALLBACK_HOLM_FAMILY_SIZE,
+): number {
+  return countFamilyHypotheses(records, familyId) || fallback;
+}
+
+export type ExperimentFamilySummary = {
+  familyId: string;
+  /** Alias of `hypothesisCount` — Holm family size. Must not grow when only a look is added. */
+  familySize: number;
+  hypothesisCount: number;
+  lookCount: number;
+  fallbackFamilySize: number;
+};
+
+export function buildExperimentFamilySummary(
+  records: ExperimentRecord[],
+  familyId: string,
+  fallback = FALLBACK_HOLM_FAMILY_SIZE,
+): ExperimentFamilySummary {
+  const hypothesisCount = resolveHolmFamilySize(records, familyId, fallback);
+  return {
+    familyId,
+    familySize: hypothesisCount,
+    hypothesisCount,
+    lookCount: Math.max(1, countFamilyLooks(records, familyId)),
+    fallbackFamilySize: fallback,
+  };
+}
+
+export function parseExperimentFamilySummary(value: unknown): ExperimentFamilySummary | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.familyId !== "string" || raw.familyId.length === 0) return null;
+  if (typeof raw.familySize !== "number" || !Number.isFinite(raw.familySize) || raw.familySize < 1) return null;
+  if (typeof raw.hypothesisCount !== "number" || !Number.isFinite(raw.hypothesisCount) || raw.hypothesisCount < 1) {
+    return null;
+  }
+  if (typeof raw.lookCount !== "number" || !Number.isFinite(raw.lookCount) || raw.lookCount < 1) return null;
+  if (typeof raw.fallbackFamilySize !== "number" || !Number.isFinite(raw.fallbackFamilySize) || raw.fallbackFamilySize < 1) {
+    return null;
+  }
+  const familySize = Math.floor(raw.familySize);
+  const hypothesisCount = Math.floor(raw.hypothesisCount);
+  const lookCount = Math.floor(raw.lookCount);
+  if (familySize !== hypothesisCount) return null;
+  return {
+    familyId: raw.familyId,
+    familySize,
+    hypothesisCount,
+    lookCount,
+    fallbackFamilySize: Math.floor(raw.fallbackFamilySize),
+  };
+}
+
 export type ExperimentArtifact = {
   experimentId: string;
   gitCommit: string | null;

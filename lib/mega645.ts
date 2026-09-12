@@ -6,6 +6,13 @@ export const MEGA_645 = {
   totalCombinations: 8_145_060,
 } as const;
 
+/** Fixed prizes only. Jackpot is variable and must not enter a decision metric. */
+export const FIXED_PRIZE = {
+  FIRST: 10_000_000,
+  SECOND: 300_000,
+  THIRD: 30_000,
+} as const;
+
 export type PrizeTier = "JACKPOT" | "FIRST" | "SECOND" | "THIRD" | "NONE";
 
 export type TicketResult = {
@@ -18,9 +25,9 @@ export type TicketResult = {
 
 const PRIZES: Record<PrizeTier, { label: string; payout: number | null }> = {
   JACKPOT: { label: "Jackpot", payout: null },
-  FIRST: { label: "Giải Nhất", payout: 10_000_000 },
-  SECOND: { label: "Giải Nhì", payout: 300_000 },
-  THIRD: { label: "Giải Ba", payout: 30_000 },
+  FIRST: { label: "Giải Nhất", payout: FIXED_PRIZE.FIRST },
+  SECOND: { label: "Giải Nhì", payout: FIXED_PRIZE.SECOND },
+  THIRD: { label: "Giải Ba", payout: FIXED_PRIZE.THIRD },
   NONE: { label: "Chưa trúng giải", payout: 0 },
 };
 

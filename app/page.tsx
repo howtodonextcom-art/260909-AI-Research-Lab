@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BarChart3, Check, CircleDollarSign, Dices, Eraser, FlaskConical, Grid3X3, Info, RefreshCw, RotateCcw, ShieldCheck, Sparkles, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ProfitLab } from "@/components/profit-lab";
@@ -11,8 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { STRATEGIES, calculateFrequency, createStrategyPick, filterByWindow, formatPercent, runTemporalBacktestReport, runWalkForwardBacktest, type DrawRecord, type StrategyId, type WindowId } from "@/lib/analytics";
-import { CURRENT_PROTOCOL } from "@/lib/research/protocol";
-import { monteCarloFairnessDiagnostic } from "@/lib/research/statistics";
+import {
+  FALLBACK_HOLM_FAMILY_SIZE,
+  parseExperimentFamilySummary,
+  type ExperimentFamilySummary,
+} from "@/lib/research/experiments";
+import { CURRENT_PROTOCOL, classifyEvidence, parseProtocolLock, type ProtocolLock } from "@/lib/research/protocol";
+import { INTERACTIVE_FAIRNESS_SIMULATION_COUNT, monteCarloFairnessDiagnostic } from "@/lib/research/statistics";
 import { evaluateTicket, formatBall, formatVnd, generateQuickPick, type TicketResult } from "@/lib/mega645";
 import { useDrawData, type DrawDataState } from "@/hooks/use-draw-data";
 
@@ -75,18 +80,41 @@ function FrequencyCell({ row, maxCount }: { row: ReturnType<typeof calculateFreq
 function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: DrawDataState }) {
   const [windowId, setWindowId] = useState<WindowId>("365D");
   const [strategy, setStrategy] = useState<StrategyId>("HOT");
+  const [protocolLock, setProtocolLock] = useState<ProtocolLock | null>(null);
+  const [familySummary, setFamilySummary] = useState<ExperimentFamilySummary | null>(null);
   const windowDraws = useMemo(() => filterByWindow(draws, windowId), [draws, windowId]);
   const frequencies = useMemo(() => calculateFrequency(windowDraws), [windowDraws]);
-  // §21: Mega 6/45 samples six numbers without replacement, so per-number counts
-  // are negatively correlated and the classical chi-square(44) reference does
-  // not strictly apply. Calibrated against an empirical null instead of
-  // asserted against a theoretical df — see lib/research/statistics.ts.
+  // Interactive MC count is intentionally lower than CURRENT_PROTOCOL.fairnessSimulationCount
+  // (artifact/canonical precision) so the Research tab stays responsive on full history.
   const fairness = useMemo(
-    () => monteCarloFairnessDiagnostic(windowDraws, { simulationCount: CURRENT_PROTOCOL.fairnessSimulationCount, seed: 645 }),
+    () => monteCarloFairnessDiagnostic(windowDraws, { simulationCount: INTERACTIVE_FAIRNESS_SIMULATION_COUNT, seed: 645 }),
     [windowDraws],
   );
-  const backtests = useMemo(() => runWalkForwardBacktest(draws, 90), [draws]);
-  const temporalReport = useMemo(() => runTemporalBacktestReport(draws, 90), [draws]);
+  const familySize = familySummary?.familySize ?? FALLBACK_HOLM_FAMILY_SIZE;
+  const lookCount = familySummary?.lookCount ?? 1;
+  const backtests = useMemo(() => runWalkForwardBacktest(draws, 90, CURRENT_PROTOCOL.alpha), [draws]);
+  const temporalReport = useMemo(
+    () => runTemporalBacktestReport(draws, 90, CURRENT_PROTOCOL.alpha, familySize, lookCount),
+    [draws, familySize, lookCount],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      fetch("/data/protocol-lock.json").then((response) => (response.ok ? response.json() : null)).catch(() => null),
+      fetch("/data/experiment-family.json").then((response) => (response.ok ? response.json() : null)).catch(() => null),
+    ]).then(([lockRaw, familyRaw]) => {
+      if (cancelled) return;
+      setProtocolLock(parseProtocolLock(lockRaw));
+      setFamilySummary(parseExperimentFamilySummary(familyRaw));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const latest = draws.at(-1);
+  const latestEvidence = latest && protocolLock ? classifyEvidence(latest.id, protocolLock) : null;
   const random = backtests.find((item) => item.strategy === "RANDOM");
   // The candidate comes from validation only. Ranking whole-history ROI here
   // would let the holdout choose what the app recommends, which is the exact
@@ -99,7 +127,6 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
   const overdue = frequencies.slice().sort((a, b) => b.gap - a.gap || a.number - b.number).slice(0, 6);
   const maxCount = Math.max(...frequencies.map((row) => row.count), 1);
   const expectedCount = frequencies[0]?.expected ?? 0;
-  const latest = draws.at(-1);
   const gatesPassed = selected?.gates.passedCount ?? 0;
   const holdoutSignals = temporalReport.reliability.filter((item) => item.verdict === "HOLDOUT_SIGNAL").length;
   const selectedReliability = temporalReport.reliability.find((item) => item.selectedOnValidation);
@@ -117,17 +144,17 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           {WINDOWS.map((window) => <Button key={window.id} aria-pressed={windowId === window.id} className={windowId === window.id ? "window-active" : ""} size="sm" variant="ghost" onClick={() => setWindowId(window.id)}>{window.label}</Button>)}
         </div>
 
-        <DataStatus state={dataState} />
+        <DataStatus state={dataState} protocolLock={protocolLock} familySummary={familySummary} />
 
         <div className="metrics-grid">
           <Metric label="Số kỳ trong mẫu" value={windowDraws.length.toLocaleString("vi-VN")} note={(windowDraws.length * 6).toLocaleString("vi-VN") + " bóng đã quay"} />
           <Metric
             label="Chẩn đoán độ công bằng (Monte Carlo)"
             value={`Q=${fairness.observedStatistic.toFixed(1)} · p≈${fairness.monteCarloPValue.toFixed(3)}`}
-            note={`Đối chiếu với ${fairness.simulationCount} bộ dữ liệu quay công bằng mô phỏng (seed=${fairness.seed}) — không phải chỉ báo dự đoán`}
+            note={`Tương tác: ${fairness.simulationCount} mô phỏng (seed=${fairness.seed}); protocol canonical=${CURRENT_PROTOCOL.fairnessSimulationCount} — không phải chỉ báo dự đoán`}
           />
           <Metric label={STRATEGIES[strategy].name + " qua cổng sàng lọc"} value={gatesPassed + " / 3"} note="Cổng in-sample, không phải xác nhận" tone={gatesPassed === 3 ? "good" : "bad"} />
-          <Metric label="Xác suất Jackpot" value="1 / 8.145.060" note="Không đổi theo số nóng hoặc lạnh" />
+          <Metric label="Xác suất Jackpot" value="1 / 8.145.060" note={latestEvidence ? `Kỳ mới nhất: ${latestEvidence}` : "Không đổi theo số nóng hoặc lạnh"} />
         </div>
 
         <section className="analysis-card conclusion-card" aria-labelledby="research-conclusion-heading">
@@ -174,7 +201,7 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
               </TableRow>)}</TableBody>
             </Table>
           </div>
-          <p className="method-note"><Info /><span>Bảng này tính trên toàn bộ lịch sử, bao gồm cả phần dùng làm test, nên chỉ là <strong>thống kê mô tả</strong> và không được dùng để chọn chiến lược. Đối chứng là trung bình 32 vé random/kỳ. ROI chỉ tính giải cố định 3–5 số, không gồm Jackpot. Ba cổng là bộ lọc thăm dò in-sample, không phải xác nhận.</span></p>
+          <p className="method-note"><Info /><span>Bảng này tính trên toàn bộ lịch sử, bao gồm cả phần dùng làm test, nên chỉ là <strong>thống kê mô tả</strong> và không được dùng để chọn chiến lược. Walk-forward trượt cửa sổ {temporalReport.lookback} kỳ (thử nghiệm liền kề chia sẻ lịch sử) nên z-score/p-value dùng Newey–West HAC ({temporalReport.varianceMethod}), băng thông min(lookback-1, max(1, floor(n^(1/3)))), không giả định i.i.d. Đối chứng là trung bình 32 vé random/kỳ. ROI chỉ tính giải cố định 3–5 số, không gồm Jackpot. Cổng trả thưởng so sánh tổng đã winsorize (cắt trần giải Nhì / 4 số), không cộng payout thô. Ba cổng là bộ lọc thăm dò in-sample, không phải xác nhận.</span></p>
         </section>
 
         <section className="analysis-card holdout-card">
@@ -197,7 +224,7 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
               </TableRow>)}</TableBody>
             </Table>
           </div>
-          <p className="method-note"><Info /><span>{selectedReliability ? STRATEGIES[selectedReliability.strategy].name + " được chọn bằng validation rồi kiểm tra trên test chưa dùng để chọn." : "Không chiến lược nào đạt ngưỡng trên validation để được chọn."} P-value dùng kiểm định một phía so với random và hiệu chỉnh Holm-Bonferroni theo familySize ({temporalReport.familySize} chiến lược trong họ kiểm định; registry rỗng thì bằng số chiến lược không phải RANDOM đang thấy). Đây là <strong>chia hồi cứu trên dữ liệu đã có sẵn</strong>: tập test là holdout theo nghĩa cơ học (không dùng để chọn), nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ các kỳ quay phát sinh sau khi protocol <code>{temporalReport.protocolVersion}</code> được khóa mới là bằng chứng prospective thật sự.</span></p>
+          <p className="method-note"><Info /><span>{selectedReliability ? STRATEGIES[selectedReliability.strategy].name + " được chọn bằng validation rồi kiểm tra trên test chưa dùng để chọn." : "Không chiến lược nào đạt ngưỡng trên validation để được chọn."} P-value dùng kiểm định một phía so với random, SE Newey–West HAC (cửa sổ chồng, băng thông min(lookback-1, max(1, floor(n^(1/3))))), và hiệu chỉnh Holm-Bonferroni theo số giả thuyết / registry = {temporalReport.familySize} (family {familySummary?.familyId ?? "—"}; fallback {FALLBACK_HOLM_FAMILY_SIZE} nếu registry trống — familySize không tăng khi chỉ thêm kỳ/look mới). lookCount={temporalReport.lookCount}; alpha look hiện tại sau chi tiêu Pocock = {temporalReport.alpha} (nominal {temporalReport.nominalAlpha}). Đây là <strong>chia hồi cứu trên dữ liệu đã có sẵn</strong>: tập test là holdout theo nghĩa cơ học (không dùng để chọn), nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ các kỳ từ <code>{protocolLock?.prospectiveStartDrawId ?? "—"}</code> (protocol <code>{temporalReport.protocolVersion}</code>) mới là bằng chứng prospective.</span></p>
         </section>
 
         <ProfitLab />
@@ -224,7 +251,7 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           <div className="gate-list">
             <div className={selected?.gates.significant ? "gate-pass" : ""}><Check /> Ý nghĩa thống kê <span>z = {selected?.zScoreVsRandom.toFixed(2) ?? "—"}</span></div>
             <div className={selected?.gates.stableAcrossHalves ? "gate-pass" : ""}><Check /> Ổn định hai nửa <span>{selected ? selected.firstHalfEdge.toFixed(2) + " / " + selected.secondHalfEdge.toFixed(2) : "—"}</span></div>
-            <div className={selected?.gates.outperformsRandomPayout ? "gate-pass" : ""}><Check /> Trả thưởng hơn random <span>{selected && random ? formatVnd(selected.payout - random.payout) : "—"}</span></div>
+            <div className={selected?.gates.outperformsRandomPayout ? "gate-pass" : ""}><Check /> Trả thưởng bền đuôi hơn random <span>{selected && random ? formatVnd(selected.robustPayout - random.robustPayout) : "—"}</span></div>
           </div>
           <div className="suggestion-balls">{suggestion.map((number) => <Ball key={number} number={number} />)}</div>
           <p className="suggestion-warning">Bộ số nghiên cứu, không phải khuyến nghị mua và không phải cam kết thắng. Mỗi vé vẫn có xác suất Jackpot như nhau: 1/8.145.060.</p>

@@ -48,7 +48,17 @@ export function expectedPrizeFrequency(ticketCount: number): Record<number, numb
   return Object.fromEntries(outcomes.map((o) => [o.matches, o.probability * ticketCount]));
 }
 
-export type MonteCarloNullOptions = { simulationCount?: number; seed?: number };
+/**
+ * UI-only Monte Carlo budget for the ResearchLab fairness metric.
+ * Kept separate from `CURRENT_PROTOCOL.fairnessSimulationCount` (canonical /
+ * artifact precision, typically ≥2000) so interactive pages stay responsive.
+ */
+export const INTERACTIVE_FAIRNESS_SIMULATION_COUNT = 300;
+
+export type MonteCarloNullOptions = {
+  simulationCount?: number;
+  seed?: number;
+};
 
 export function simulateFairDataset(drawCount: number, rng: () => number): number[][] {
   return Array.from({ length: drawCount }, () => drawFairTicket(rng));

@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DrawDataState } from "@/hooks/use-draw-data";
 import { analyzeContinuity } from "@/lib/data/continuity";
-import { CURRENT_PROTOCOL } from "@/lib/research/protocol";
+import { CURRENT_PROTOCOL, classifyEvidence, type ProtocolLock } from "@/lib/research/protocol";
+import type { ExperimentFamilySummary } from "@/lib/research/experiments";
+import { spentAlphaForLook } from "@/lib/research/alpha-spending";
 import { EXPECTED_MATCHES, PRIMARY_ENDPOINT } from "@/lib/research/statistics";
 
 function formatDate(value: string | null | undefined): string {
@@ -81,15 +83,24 @@ function Message({ state }: { state: DrawDataState }) {
 /**
  * Data provenance panel and the manual update control.
  *
- * Deliberately explicit that an update is stored on this device only: the app
- * has no server-side store, and telling the user their data was "saved" would
- * imply a durability that does not exist.
+ * User snapshots live on this device. Any server cache is only a politeness
+ * proxy in front of the official crawl — not a user store and not a source of truth.
  */
-export function DataStatus({ state }: { state: DrawDataState }) {
+export function DataStatus({
+  state,
+  protocolLock = null,
+  familySummary = null,
+}: {
+  state: DrawDataState;
+  protocolLock?: ProtocolLock | null;
+  familySummary?: ExperimentFamilySummary | null;
+}) {
   const status = describe(state);
   const manifest = state.manifest;
   const latestRecord = state.records.at(-1);
   const continuity = useMemo(() => analyzeContinuity(state.records), [state.records]);
+  const latestEvidence =
+    latestRecord && protocolLock ? classifyEvidence(latestRecord.id, protocolLock) : null;
 
   return (
     <section className="analysis-card data-status-card" aria-labelledby="data-status-heading">
@@ -148,6 +159,30 @@ export function DataStatus({ state }: { state: DrawDataState }) {
           <dd>{CURRENT_PROTOCOL.version}</dd>
         </div>
         <div>
+          <dt>Protocol hash</dt>
+          <dd>{protocolLock ? `${protocolLock.protocolHash.slice(0, 12)}…` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Prospective từ kỳ</dt>
+          <dd>{protocolLock?.prospectiveStartDrawId ? `#${protocolLock.prospectiveStartDrawId}` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Bằng chứng kỳ mới nhất</dt>
+          <dd>{latestEvidence ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>Số giả thuyết (Holm / registry)</dt>
+          <dd>{familySummary ? familySummary.hypothesisCount : "—"}</dd>
+        </div>
+        <div>
+          <dt>Số lần nhìn dữ liệu (look)</dt>
+          <dd>{familySummary ? familySummary.lookCount : "—"}</dd>
+        </div>
+        <div>
+          <dt>Alpha look hiện tại (Pocock)</dt>
+          <dd>{familySummary ? spentAlphaForLook(familySummary.lookCount, CURRENT_PROTOCOL.alpha) : "—"}</dd>
+        </div>
+        <div>
           <dt>Endpoint chính</dt>
           <dd>{PRIMARY_ENDPOINT.id}</dd>
         </div>
@@ -179,7 +214,7 @@ export function DataStatus({ state }: { state: DrawDataState }) {
           Xóa cache
         </Button>
         <span className="data-status-note">
-          <CloudDownload aria-hidden="true" /> Bản cập nhật được lưu trên thiết bị này, không gửi lên máy chủ.
+          <CloudDownload aria-hidden="true" /> Dữ liệu người dùng lưu trên thiết bị này. Máy chủ không giữ kho của bạn; cache (nếu có) chỉ là proxy lịch sự tới nguồn official trong TTL, không phải server store.
         </span>
       </div>
 

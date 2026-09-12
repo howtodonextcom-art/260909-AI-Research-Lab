@@ -46,7 +46,11 @@ const lock = buildProtocolLock({
 });
 
 await mkdir(path.dirname(lockPath), { recursive: true });
-await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
+const payload = `${JSON.stringify(lock, null, 2)}\n`;
+await writeFile(lockPath, payload, "utf8");
+const publicLockPath = path.join(projectRoot, "public", "data", "protocol-lock.json");
+await mkdir(path.dirname(publicLockPath), { recursive: true });
+await writeFile(publicLockPath, payload, "utf8");
 
 console.log("ĐÃ KHÓA PROTOCOL");
 console.log(`  protocolVersion:        ${lock.protocolVersion}`);
@@ -54,3 +58,4 @@ console.log(`  protocolHash:           ${lock.protocolHash}`);
 console.log(`  protocolDatasetHash:    ${lock.protocolDatasetHash}`);
 console.log(`  prospectiveStartDrawId: ${lock.prospectiveStartDrawId ?? "null"}`);
 console.log(`  lockFile:               ${path.relative(projectRoot, lockPath)}`);
+console.log(`  publicLockFile:         ${path.relative(projectRoot, publicLockPath)}`);

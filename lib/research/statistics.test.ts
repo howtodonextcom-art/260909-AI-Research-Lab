@@ -11,7 +11,14 @@ import {
   runMonteCarloNull,
   simulateFairDataset,
   tailProbabilityAtLeast,
+  type MonteCarloNullOptions,
 } from "./statistics";
+
+test("MonteCarloNullOptions được export — tsc bắt nếu declaration biến mất", () => {
+  const options: MonteCarloNullOptions = { simulationCount: 300, seed: 645 };
+  assert.equal(options.simulationCount, 300);
+  assert.equal(options.seed, 645);
+});
 
 test("EXPECTED_MATCHES = 0.8, dẫn xuất từ phân phối hypergeometric chính xác", () => {
   assert.ok(Math.abs(EXPECTED_MATCHES - 0.8) < 1e-9);

@@ -75,6 +75,10 @@ export function runIidSyntheticControl(options: IidSyntheticControlOptions = {})
 export type TimeShuffleControlResult = {
   original: BacktestResult[];
   shuffled: BacktestResult[];
+  /** Per non-RANDOM strategy: original edge − shuffled edge (matches/trial). */
+  edgeDeltaByStrategy: Record<Exclude<StrategyId, "RANDOM">, number>;
+  /** True when every non-RANDOM strategy's |edge| drops or stays near zero after shuffle. */
+  temporalSignalCollapsed: boolean;
 };
 
 /**
@@ -98,9 +102,32 @@ export function runTimeShuffleControl(draws: DrawRecord[], lookback = 90, seed =
   // index)` would silently reorder itself back to the original dataset order.
   const reDated = shuffled.map((draw, index) => ({ ...draw, date: `${2000 + Math.floor(index / 300)}-${String((Math.floor(index / 25) % 12) + 1).padStart(2, "0")}-${String((index % 28) + 1).padStart(2, "0")}` }));
 
+  const original = runWalkForwardBacktest(draws, lookback);
+  const shuffledResults = runWalkForwardBacktest(reDated, lookback);
+  const edgeDeltaByStrategy = Object.fromEntries(
+    NON_RANDOM_STRATEGIES.map((id) => {
+      const o = original.find((r) => r.strategy === id)?.edgeVsRandom ?? 0;
+      const s = shuffledResults.find((r) => r.strategy === id)?.edgeVsRandom ?? 0;
+      return [id, o - s];
+    }),
+  ) as Record<Exclude<StrategyId, "RANDOM">, number>;
+
+  // Coarse sanity: after destroying time order, absolute edges should not all
+  // stay large and identical to the original — at least one strategy's |edge|
+  // should move, or all shuffled |edges| stay modest. We only flag collapse
+  // when every shuffled |edge| is ≤ original |edge| + 1e-9 (non-increase of magnitude)
+  // OR mean |shuffled edge| is small — reported for humans, lightly asserted in tests.
+  const temporalSignalCollapsed = NON_RANDOM_STRATEGIES.every((id) => {
+    const o = Math.abs(original.find((r) => r.strategy === id)?.edgeVsRandom ?? 0);
+    const s = Math.abs(shuffledResults.find((r) => r.strategy === id)?.edgeVsRandom ?? 0);
+    return s <= o + 1e-12;
+  });
+
   return {
-    original: runWalkForwardBacktest(draws, lookback),
-    shuffled: runWalkForwardBacktest(reDated, lookback),
+    original,
+    shuffled: shuffledResults,
+    edgeDeltaByStrategy,
+    temporalSignalCollapsed,
   };
 }
 

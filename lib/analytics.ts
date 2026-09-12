@@ -1,4 +1,5 @@
-import { MEGA_645, evaluateTicket } from "./mega645";
+import { FIXED_PRIZE, MEGA_645, evaluateTicket } from "./mega645";
+import { spentAlphaForLook } from "./research/alpha-spending";
 
 export type DrawRecord = {
   date: string;
@@ -25,6 +26,12 @@ export type EvaluationPhaseId = "DEVELOPMENT" | "VALIDATION" | "TEST";
 
 /** Bumped whenever the strategy set or selection rule changes. */
 export const PROTOCOL_VERSION = "2026-09-10.1";
+
+/** In-sample gate and default temporal alpha. Kept here to avoid analytics ↔ protocol cycles. */
+export const DEFAULT_ALPHA = 0.05;
+
+/** Winsorize per-draw payout at the 4-match prize so one 5-match cannot dominate the gate. */
+export const ROBUST_PAYOUT_CAP = FIXED_PRIZE.SECOND;
 
 export const STRATEGIES: Record<StrategyId, { name: string; description: string }> = {
   RANDOM: { name: "Ngẫu nhiên đối chứng", description: "Trung bình 32 vé ngẫu nhiên có seed ở mỗi kỳ để giảm nhiễu của một chuỗi đơn lẻ." },
@@ -66,6 +73,8 @@ export type BacktestResult = {
   averageMatches: number;
   hit3Rate: number;
   payout: number;
+  /** Sum of per-draw payouts capped at `ROBUST_PAYOUT_CAP` (giải Nhì / 4 số). */
+  robustPayout: number;
   cost: number;
   roi: number;
   edgeVsRandom: number;
@@ -117,11 +126,17 @@ export type SelectedCandidate = {
 
 export type TemporalBacktestReport = {
   lookback: number;
+  /** Alpha actually used for Holm / selectCandidate after look spending. */
   alpha: number;
+  /** Protocol / requested alpha before spending. */
+  nominalAlpha: number;
+  lookCount: number;
   multipleTestingMethod: "Holm-Bonferroni";
+  /** How z / p / CI treat walk-forward dependence. */
+  varianceMethod: "newey-west-hac";
   selectionRule: string;
   protocolVersion: string;
-  /** Holm family size: registry family when provided, otherwise the visible non-RANDOM set. */
+  /** Holm family size = hypothesis count, not experimentId / look count. */
   familySize: number;
   /** Null when validation produced no strategy that clears the bar. */
   candidate: SelectedCandidate | null;
@@ -220,6 +235,57 @@ function sampleSd(values: number[]): number {
   return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / (values.length - 1));
 }
 
+/**
+ * Newey–West / Bartlett HAC bandwidth:
+ *   min(lookback − 1, max(1, ⌊n^{1/3}⌋))
+ *
+ * Cube-root of n is a standard automatic bandwidth rate for the Bartlett
+ * kernel (Newey & West 1994; see also Andrews 1991 on plug-in rules). The
+ * lookback cap keeps the lag from exceeding the overlap horizon.
+ */
+export function hacBandwidth(n: number, lookback: number): number {
+  if (!Number.isFinite(n) || n < 2) return 0;
+  const cubeRoot = Math.max(1, Math.floor(Math.cbrt(n)));
+  const overlap = Math.max(0, lookback - 1);
+  return Math.min(overlap, cubeRoot);
+}
+
+/**
+ * Newey–West HAC standard error of the sample mean (Bartlett kernel).
+ */
+export function neweyWestStandardError(values: number[], lag: number): number {
+  const n = values.length;
+  if (n < 2) return 0;
+  const average = mean(values);
+  const L = Math.max(0, Math.min(Math.floor(lag), n - 1));
+  let gamma0 = 0;
+  for (let t = 0; t < n; t += 1) gamma0 += (values[t] - average) ** 2;
+  gamma0 /= n;
+  let longRun = gamma0;
+  for (let k = 1; k <= L; k += 1) {
+    let gamma = 0;
+    for (let t = k; t < n; t += 1) gamma += (values[t] - average) * (values[t - k] - average);
+    gamma /= n;
+    longRun += 2 * (1 - k / (L + 1)) * gamma;
+  }
+  return Math.sqrt(Math.max(longRun, 0) / n);
+}
+
+/** SE for overlapping walk-forward paired differences: max(HAC, naive) so we never understate uncertainty vs the old estimator. */
+export function dependenceAwareStandardError(differences: number[], lookback: number): {
+  se: number;
+  naiveSe: number;
+  hac: number;
+  lag: number;
+} {
+  const n = differences.length;
+  const sd = sampleSd(differences);
+  const naiveSe = sd === 0 || n === 0 ? 0 : sd / Math.sqrt(n);
+  const lag = hacBandwidth(n, lookback);
+  const hac = neweyWestStandardError(differences, lag);
+  return { se: Math.max(hac, naiveSe), naiveSe, hac, lag };
+}
+
 function normalCdf(value: number): number {
   const sign = value < 0 ? -1 : 1;
   const x = Math.abs(value) / Math.SQRT2;
@@ -233,9 +299,25 @@ function normalCdf(value: number): number {
   return 0.5 * (1 + erf);
 }
 
-function oneSidedPValue(zScore: number): number {
+export function oneSidedPValue(zScore: number): number {
   if (!Number.isFinite(zScore)) return 1;
   return Math.max(0, Math.min(1, 1 - normalCdf(zScore)));
+}
+
+export function screeningSignificant(zScore: number, alpha: number, isControl: boolean): boolean {
+  return !isControl && oneSidedPValue(zScore) <= alpha;
+}
+
+export function robustPayoutTotal(payouts: number[], cap = ROBUST_PAYOUT_CAP): number {
+  return payouts.reduce((sum, value) => sum + Math.min(Math.max(value, 0), cap), 0);
+}
+
+export function outperformsOnRobustPayout(
+  strategyPayouts: number[],
+  randomPayouts: number[],
+  cap = ROBUST_PAYOUT_CAP,
+): boolean {
+  return robustPayoutTotal(strategyPayouts, cap) > robustPayoutTotal(randomPayouts, cap);
 }
 
 export function holmBonferroni<T extends { pValue: number }>(
@@ -299,30 +381,37 @@ function buildWalkForwardSeries(draws: DrawRecord[], lookback: number): WalkForw
   return { dates, matches, hit3, payouts };
 }
 
-function summarizeSeries(series: WalkForwardSeries, strategy: StrategyId, start: number, end: number): BacktestResult {
+function summarizeSeries(
+  series: WalkForwardSeries,
+  strategy: StrategyId,
+  start: number,
+  end: number,
+  lookback: number,
+  alpha: number = DEFAULT_ALPHA,
+): BacktestResult {
   const randomMatches = series.matches.RANDOM.slice(start, end);
   const values = series.matches[strategy].slice(start, end);
   const randomAverage = mean(randomMatches);
   const midpoint = Math.floor(values.length / 2);
   const differences = values.map((value, index) => value - randomMatches[index]);
   const averageDifference = mean(differences);
-  const sd = sampleSd(differences);
-  const zScore = sd === 0 ? 0 : averageDifference / (sd / Math.sqrt(differences.length));
+  const { se } = dependenceAwareStandardError(differences, lookback);
+  const zScore = se === 0 ? 0 : averageDifference / se;
   const firstHalfEdge = mean(values.slice(0, midpoint)) - mean(randomMatches.slice(0, midpoint));
   const secondHalfEdge = mean(values.slice(midpoint)) - mean(randomMatches.slice(midpoint));
   const trials = values.length;
   const cost = trials * MEGA_645.ticketPrice;
-  const payout = series.payouts[strategy].slice(start, end).reduce((sum, value) => sum + value, 0);
+  const strategyPayouts = series.payouts[strategy].slice(start, end);
+  const randomPayouts = series.payouts.RANDOM.slice(start, end);
+  const payout = strategyPayouts.reduce((sum, value) => sum + value, 0);
+  const robustPayout = robustPayoutTotal(strategyPayouts);
   const roi = cost === 0 ? 0 : ((payout - cost) / cost) * 100;
   const edgeVsRandom = mean(values) - randomAverage;
-  const randomPayout = series.payouts.RANDOM.slice(start, end).reduce((sum, value) => sum + value, 0);
 
   const isControl = strategy === "RANDOM";
-  const significant = !isControl && zScore >= 1.96;
+  const significant = screeningSignificant(zScore, alpha, isControl);
   const stableAcrossHalves = !isControl && firstHalfEdge > 0 && secondHalfEdge > 0;
-  // High variance by construction: the strategy side is a single ticket while
-  // the control is an average of 32, and one 5-match dominates either total.
-  const outperformsRandomPayout = !isControl && payout > randomPayout;
+  const outperformsRandomPayout = !isControl && outperformsOnRobustPayout(strategyPayouts, randomPayouts);
 
   return {
     strategy,
@@ -330,6 +419,7 @@ function summarizeSeries(series: WalkForwardSeries, strategy: StrategyId, start:
     averageMatches: mean(values),
     hit3Rate: mean(series.hit3[strategy].slice(start, end)) * 100,
     payout,
+    robustPayout,
     cost,
     roi,
     edgeVsRandom,
@@ -345,12 +435,19 @@ function summarizeSeries(series: WalkForwardSeries, strategy: StrategyId, start:
   };
 }
 
-function summarizePhase(series: WalkForwardSeries, strategy: StrategyId, phase: EvaluationPhase, start: number, end: number): PhaseBacktestResult {
-  const result = summarizeSeries(series, strategy, start, end);
+function summarizePhase(
+  series: WalkForwardSeries,
+  strategy: StrategyId,
+  phase: EvaluationPhase,
+  start: number,
+  end: number,
+  lookback: number,
+  alpha: number = DEFAULT_ALPHA,
+): PhaseBacktestResult {
+  const result = summarizeSeries(series, strategy, start, end, lookback, alpha);
   const differences = series.matches[strategy].slice(start, end).map((value, index) => value - series.matches.RANDOM[start + index]);
-  const sd = sampleSd(differences);
-  const standardError = sd === 0 || differences.length === 0 ? 0 : sd / Math.sqrt(differences.length);
-  const margin = 1.96 * standardError;
+  const { se } = dependenceAwareStandardError(differences, lookback);
+  const margin = 1.96 * se;
   return {
     ...result,
     phase: phase.id,
@@ -383,11 +480,27 @@ function splitEvaluationPhases(series: WalkForwardSeries): Array<EvaluationPhase
     }));
 }
 
-export function runWalkForwardBacktest(draws: DrawRecord[], lookback = 90): BacktestResult[] {
+/** Paired (strategy − RANDOM) match differences for one phase — same series the SE path uses. */
+export function walkForwardPairedDifferences(
+  draws: DrawRecord[],
+  strategy: Exclude<StrategyId, "RANDOM">,
+  phaseId: EvaluationPhaseId,
+  lookback = 90,
+): number[] {
+  const series = buildWalkForwardSeries(draws, lookback);
+  if (!series) return [];
+  const phase = splitEvaluationPhases(series).find((item) => item.id === phaseId);
+  if (!phase) return [];
+  return series.matches[strategy]
+    .slice(phase.start, phase.end)
+    .map((value, index) => value - series.matches.RANDOM[phase.start + index]);
+}
+
+export function runWalkForwardBacktest(draws: DrawRecord[], lookback = 90, alpha = DEFAULT_ALPHA): BacktestResult[] {
   const series = buildWalkForwardSeries(draws, lookback);
   if (!series) return [];
   const strategyIds = Object.keys(STRATEGIES) as StrategyId[];
-  return strategyIds.map((strategy) => summarizeSeries(series, strategy, 0, series.dates.length));
+  return strategyIds.map((strategy) => summarizeSeries(series, strategy, 0, series.dates.length, lookback, alpha));
 }
 
 export const SELECTION_RULE =
@@ -402,7 +515,7 @@ export const SELECTION_RULE =
  */
 export function selectCandidate(
   validationResults: PhaseBacktestResult[],
-  alpha = 0.05,
+  alpha = DEFAULT_ALPHA,
 ): SelectedCandidate | null {
   const eligible = validationResults
     .filter((result) => result.strategy !== "RANDOM")
@@ -422,15 +535,21 @@ export function selectCandidate(
 export function runTemporalBacktestReport(
   draws: DrawRecord[],
   lookback = 90,
-  alpha = 0.05,
+  alpha = DEFAULT_ALPHA,
   familySize?: number,
+  lookCount = 1,
 ): TemporalBacktestReport {
+  const resolvedLookCount = Math.max(1, Math.floor(lookCount));
+  const spentAlpha = spentAlphaForLook(resolvedLookCount, alpha);
   const series = buildWalkForwardSeries(draws, lookback);
   if (!series) {
     return {
       lookback,
-      alpha,
+      alpha: spentAlpha,
+      nominalAlpha: alpha,
+      lookCount: resolvedLookCount,
       multipleTestingMethod: "Holm-Bonferroni",
+      varianceMethod: "newey-west-hac",
       selectionRule: SELECTION_RULE,
       protocolVersion: PROTOCOL_VERSION,
       familySize: familySize ?? 0,
@@ -444,7 +563,7 @@ export function runTemporalBacktestReport(
   const phasesWithBounds = splitEvaluationPhases(series);
   const strategyIds = Object.keys(STRATEGIES) as StrategyId[];
   const results = phasesWithBounds.flatMap((phase) =>
-    strategyIds.map((strategy) => summarizePhase(series, strategy, phase, phase.start, phase.end)),
+    strategyIds.map((strategy) => summarizePhase(series, strategy, phase, phase.start, phase.end, lookback, alpha)),
   );
 
   const visibleFamily = results.filter((result) => result.phase === phasesWithBounds[0]?.id && result.strategy !== "RANDOM").length;
@@ -460,13 +579,13 @@ export function runTemporalBacktestReport(
       const result = results.find((candidate) => candidate.phase === phase.id && candidate.strategy === item.strategy);
       if (result) {
         result.adjustedPValue = item.adjustedPValue;
-        result.significantAfterCorrection = result.edgeVsRandom > 0 && item.adjustedPValue <= alpha;
+        result.significantAfterCorrection = result.edgeVsRandom > 0 && item.adjustedPValue <= spentAlpha;
       }
     });
   }
 
   const validationResults = results.filter((result) => result.phase === "VALIDATION" && result.strategy !== "RANDOM");
-  const candidate = selectCandidate(validationResults, alpha);
+  const candidate = selectCandidate(validationResults, spentAlpha);
 
   const reliability = (strategyIds.filter((strategy) => strategy !== "RANDOM") as Array<Exclude<StrategyId, "RANDOM">>).map((strategy) => {
     const validation = results.find((result) => result.phase === "VALIDATION" && result.strategy === strategy);
@@ -489,8 +608,11 @@ export function runTemporalBacktestReport(
 
   return {
     lookback,
-    alpha,
+    alpha: spentAlpha,
+    nominalAlpha: alpha,
+    lookCount: resolvedLookCount,
     multipleTestingMethod: "Holm-Bonferroni",
+    varianceMethod: "newey-west-hac",
     selectionRule: SELECTION_RULE,
     protocolVersion: PROTOCOL_VERSION,
     familySize: resolvedFamilySize,

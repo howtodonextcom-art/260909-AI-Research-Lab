@@ -3,11 +3,18 @@ import test from "node:test";
 import { runTemporalBacktestReport, type DrawRecord } from "../analytics";
 import { createRng, drawFairTicket } from "./rng";
 import {
+  FALLBACK_HOLM_FAMILY_SIZE,
   buildExperimentArtifactsFromReport,
+  buildExperimentFamilySummary,
   countFamilyExperiments,
+  countFamilyHypotheses,
+  countFamilyLooks,
+  parseExperimentFamilySummary,
   parseExperimentRegistry,
+  primaryStrategyFamilyId,
   registerExperiment,
   registryHasExperiment,
+  resolveHolmFamilySize,
   transitionExperiment,
 } from "./experiments";
 import { classifyEvidence, type ProtocolLock } from "./protocol";
@@ -105,6 +112,86 @@ test("registry parse + idempotent lookup theo experimentId", () => {
   assert.equal(registryHasExperiment(records, "exp-missing"), false);
   assert.equal(countFamilyExperiments(records, "family-1"), 1);
   assert.equal(countFamilyExperiments(records, "other"), 0);
+});
+
+test("resolveHolmFamilySize đếm giả thuyết, không đếm experimentId", () => {
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  assert.equal(familyId, "protocol-2026-09-10.1-primary-strategies");
+  assert.equal(resolveHolmFamilySize([], familyId), FALLBACK_HOLM_FAMILY_SIZE);
+  const grown = [
+    { experimentId: "a", familyId },
+    { experimentId: "b", familyId },
+    { experimentId: "c", familyId },
+    { experimentId: "d", familyId },
+  ] as never;
+  assert.equal(countFamilyExperiments(grown, familyId), 4);
+  assert.equal(resolveHolmFamilySize(grown, familyId), FALLBACK_HOLM_FAMILY_SIZE);
+  assert.equal(parseExperimentFamilySummary(null), null);
+  assert.equal(parseExperimentFamilySummary({ familyId, familySize: 4, fallbackFamilySize: 3 }), null);
+});
+
+test("cùng 3 giả thuyết, 2 datasetHash → Holm familySize = 3, lookCount = 2", () => {
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  const look = (experimentId: string, hypothesisId: string, datasetHash: string) =>
+    ({
+      experimentId,
+      hypothesisId,
+      familyId,
+      strategyId: hypothesisId.split("-")[0],
+      datasetHash,
+    }) as never;
+  const twoLooks = [
+    look("exp-hot-aaa", "HOT-vs-random", "hash-aaa"),
+    look("exp-cold-aaa", "COLD-vs-random", "hash-aaa"),
+    look("exp-bal-aaa", "BALANCED-vs-random", "hash-aaa"),
+    look("exp-hot-bbb", "HOT-vs-random", "hash-bbb"),
+    look("exp-cold-bbb", "COLD-vs-random", "hash-bbb"),
+    look("exp-bal-bbb", "BALANCED-vs-random", "hash-bbb"),
+  ];
+  assert.equal(countFamilyExperiments(twoLooks, familyId), 6);
+  assert.equal(countFamilyHypotheses(twoLooks, familyId), 3);
+  assert.equal(countFamilyLooks(twoLooks, familyId), 2);
+  assert.equal(resolveHolmFamilySize(twoLooks, familyId), 3);
+  const summary = buildExperimentFamilySummary(twoLooks, familyId);
+  assert.equal(summary.familySize, 3);
+  assert.equal(summary.hypothesisCount, 3);
+  assert.equal(summary.lookCount, 2);
+  assert.equal(parseExperimentFamilySummary({ familyId, familySize: 3, fallbackFamilySize: 3 }), null);
+  assert.deepEqual(
+    parseExperimentFamilySummary({
+      familyId,
+      familySize: 3,
+      hypothesisCount: 3,
+      lookCount: 2,
+      fallbackFamilySize: 3,
+    }),
+    summary,
+  );
+  assert.equal(
+    parseExperimentFamilySummary({
+      familyId,
+      familySize: 6,
+      hypothesisCount: 3,
+      lookCount: 2,
+      fallbackFamilySize: 3,
+    }),
+    null,
+  );
+});
+
+test("public/data/experiment-family.json khớp hypothesisCount/lookCount trên registry", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { join } = await import("node:path");
+  const root = join(fileURLToPath(new URL(".", import.meta.url)), "../..");
+  const records = parseExperimentRegistry(readFileSync(join(root, "reports/experiments/registry.jsonl"), "utf8"));
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  const expected = buildExperimentFamilySummary(records, familyId);
+  const published = parseExperimentFamilySummary(JSON.parse(readFileSync(join(root, "public/data/experiment-family.json"), "utf8")));
+  assert.deepEqual(published, expected);
+  assert.equal(published?.hypothesisCount, 3);
+  assert.equal(published?.lookCount, 1);
+  assert.equal(published?.familySize, published?.hypothesisCount);
 });
 
 test("artifact gắn classifyEvidence từ protocol lock", () => {

@@ -16,12 +16,16 @@ import { runTemporalBacktestReport } from "../lib/analytics";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
 import {
   buildExperimentArtifactsFromReport,
-  countFamilyExperiments,
+  buildExperimentFamilySummary,
+  countFamilyLooks,
   parseExperimentRegistry,
+  primaryStrategyFamilyId,
   registerExperiment,
   registryHasExperiment,
+  resolveHolmFamilySize,
   transitionExperiment,
 } from "../lib/research/experiments";
+import { spentAlphaForLook } from "../lib/research/alpha-spending";
 import { CURRENT_PROTOCOL, computeProtocolHash, parseProtocolLock } from "../lib/research/protocol";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -61,12 +65,18 @@ try {
 
 const startedAt = new Date().toISOString();
 const protocolHash = await computeProtocolHash(CURRENT_PROTOCOL);
-const familyId = `protocol-${CURRENT_PROTOCOL.version}-primary-strategies`;
-const familySize = countFamilyExperiments(existing, familyId) || 3;
-const report = runTemporalBacktestReport(snapshot.records, CURRENT_PROTOCOL.lookback, CURRENT_PROTOCOL.alpha, familySize);
-const finishedAt = new Date().toISOString();
-
+const familyId = primaryStrategyFamilyId(CURRENT_PROTOCOL.version);
 const datasetHash = snapshot.manifest.datasetSha256;
+const familySize = resolveHolmFamilySize(existing, familyId);
+const lookCount = Math.max(1, countFamilyLooks(existing, familyId, datasetHash));
+const report = runTemporalBacktestReport(
+  snapshot.records,
+  CURRENT_PROTOCOL.lookback,
+  CURRENT_PROTOCOL.alpha,
+  familySize,
+  lookCount,
+);
+const finishedAt = new Date().toISOString();
 const commit = gitCommit();
 const seed = 645;
 const latestDrawId = snapshot.manifest.latestDrawId ?? snapshot.records.at(-1)?.id ?? null;
@@ -118,9 +128,16 @@ for (const artifact of artifacts) {
   await writeFile(path.join(experimentsDir, `${artifact.experimentId}.json`), `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
 }
 
+const familySummary = buildExperimentFamilySummary(existing, familyId);
+const publicFamilyPath = path.join(projectRoot, "public", "data", "experiment-family.json");
+await mkdir(path.dirname(publicFamilyPath), { recursive: true });
+await writeFile(publicFamilyPath, `${JSON.stringify(familySummary, null, 2)}\n`, "utf8");
+
 console.log(`\nĐÃ ĐĂNG KÝ VÀ HOÀN THÀNH ${artifacts.length} THỬ NGHIỆM`);
 console.log(`  familyId:      ${familyId}`);
-console.log(`  familySize:    ${familySize}`);
+console.log(`  hypothesisCount / familySize: ${familySize}`);
+console.log(`  lookCount:     ${lookCount}`);
+console.log(`  spentAlpha:    ${spentAlphaForLook(lookCount, CURRENT_PROTOCOL.alpha)}`);
 console.log(`  protocolHash:  ${protocolHash}`);
 console.log(`  datasetHash:   ${datasetHash}`);
 console.log(`  gitCommit:     ${commit ?? "—"}`);
@@ -132,4 +149,5 @@ for (const artifact of artifacts) {
   );
 }
 console.log(`\n  Registry: ${path.relative(projectRoot, registryPath)}`);
+console.log(`  Family:   ${path.relative(projectRoot, publicFamilyPath)}`);
 console.log(`  Artifacts: ${artifacts.map((a) => path.relative(projectRoot, path.join(experimentsDir, `${a.experimentId}.json`))).join(", ")}`);

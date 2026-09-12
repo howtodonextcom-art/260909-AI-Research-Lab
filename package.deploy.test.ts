@@ -16,3 +16,11 @@ test("package.json start trỏ wrangler local + sites-env", () => {
   assert.match(start, /sites-env\.mjs/);
   assert.equal(existsSync(path.join(root, "scripts/sites-env.mjs")), true);
 });
+
+test("npm test chạy typecheck (tsc --noEmit) trước business/data tests", () => {
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  assert.match(pkg.scripts.typecheck ?? "", /tsc --noEmit/);
+  assert.match(pkg.scripts.test ?? "", /typecheck/);
+});

@@ -28,8 +28,18 @@ if (!snapshot.records.length) {
 }
 
 const controlB = runTimeShuffleControl(snapshot.records, 90, 645);
-console.log("\n  B — time shuffle");
+console.log("\n  B — time shuffle (phá cấu trúc thời gian)");
 console.log(`    original trials=${controlB.original[0]?.trials ?? 0} shuffled trials=${controlB.shuffled[0]?.trials ?? 0}`);
+console.log("    strategy | edge_original | edge_shuffled | Δ(orig−shuf)");
+for (const row of controlB.original.filter((r) => r.strategy !== "RANDOM")) {
+  const shuffled = controlB.shuffled.find((r) => r.strategy === row.strategy);
+  const delta = controlB.edgeDeltaByStrategy[row.strategy as Exclude<typeof row.strategy, "RANDOM">];
+  console.log(
+    `    ${row.strategy.padEnd(8)} | ${row.edgeVsRandom.toFixed(4).padStart(13)} | ${(shuffled?.edgeVsRandom ?? 0).toFixed(4).padStart(13)} | ${delta.toFixed(4)}`,
+  );
+}
+console.log(`    temporalSignalCollapsed=${controlB.temporalSignalCollapsed} (mọi |edge| sau shuffle ≤ |edge| gốc)`);
+console.log("    Nếu edge sau shuffle vẫn lớn và giống hệt gốc → nghi tín hiệu giả / bug pipeline.");
 
 const controlC = runRandomBaselineControl(snapshot.records, 90);
 console.log("\n  C — RANDOM vs exact null");

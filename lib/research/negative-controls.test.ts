@@ -41,6 +41,23 @@ test("Control B (time shuffle): chạy được hết pipeline trên dữ liệu
     assert.ok(Number.isFinite(r.averageMatches));
     assert.ok(r.trials > 0);
   }
+  for (const id of ["HOT", "COLD", "BALANCED"] as const) {
+    assert.equal(typeof result.edgeDeltaByStrategy[id], "number");
+    assert.ok(Number.isFinite(result.edgeDeltaByStrategy[id]));
+  }
+  assert.equal(typeof result.temporalSignalCollapsed, "boolean");
+});
+
+test("Control B summary: edgeDelta = original − shuffled và tái lập với cùng seed", () => {
+  const draws = syntheticDraws(220, 11);
+  const a = runTimeShuffleControl(draws, 60, 99);
+  const b = runTimeShuffleControl(draws, 60, 99);
+  assert.deepEqual(a, b);
+  for (const id of ["HOT", "COLD", "BALANCED"] as const) {
+    const o = a.original.find((r) => r.strategy === id)!.edgeVsRandom;
+    const s = a.shuffled.find((r) => r.strategy === id)!.edgeVsRandom;
+    assert.ok(Math.abs(a.edgeDeltaByStrategy[id] - (o - s)) < 1e-12);
+  }
 });
 
 test("Control C (random baseline): trung bình khớp của RANDOM gần 0.8 kỳ vọng", () => {
