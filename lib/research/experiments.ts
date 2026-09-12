@@ -6,7 +6,7 @@
  * `scripts/run-experiment.ts` for the Node-only JSONL store and the script
  * that actually registers and completes experiments against real data.
  */
-import type { PhaseBacktestResult, StrategyId, TemporalBacktestReport } from "../analytics";
+import { hacBandwidth, type PhaseBacktestResult, type StrategyId, type TemporalBacktestReport } from "../analytics";
 import { EXPECTED_MATCHES, PRIMARY_ENDPOINT } from "./statistics";
 import { classifyEvidence, type ProtocolLock } from "./protocol";
 
@@ -25,6 +25,21 @@ export type ExperimentRecord = {
   protocolHash: string;
   registeredAt: string;
   status: ExperimentStatus;
+  /**
+   * Pre-registration fields (groundwork for future pre-registered
+   * experiments; see §31/§35). All optional and additive-only: existing
+   * lines in `reports/experiments/registry.jsonl` predate these fields and
+   * must keep parsing unchanged. When present, each is validated for shape
+   * by `parseExperimentRegistry` — see `describeExperimentRecordProblem`.
+   */
+  budgetTickets?: number;
+  budgetVnd?: number;
+  predictionKind?: "single_ticket" | "portfolio";
+  predictions?: string[];
+  preRegistered?: boolean;
+  dataCutoffDrawId?: string;
+  dataCutoffDate?: string;
+  rankingScoreVersion?: string | null;
 };
 
 export type RegisterExperimentInput = Omit<ExperimentRecord, "registeredAt" | "status">;
@@ -37,12 +52,66 @@ export function transitionExperiment(record: ExperimentRecord, status: Experimen
   return { ...record, status };
 }
 
+/**
+ * Fields present on a line are validated for shape (fail-closed, mirroring
+ * `lib/data/schema.ts:normalizeDraw`'s "explicit reason, never silent"
+ * house style): `undefined` is always fine (old registry lines predate these
+ * fields), but a present field with the wrong type/shape is never silently
+ * accepted or silently dropped — parsing throws with the line number and an
+ * explicit reason instead.
+ */
+function describeExperimentRecordProblem(record: Record<string, unknown>): string | null {
+  if (record.budgetTickets !== undefined && (typeof record.budgetTickets !== "number" || !Number.isFinite(record.budgetTickets))) {
+    return `budgetTickets phải là số hữu hạn, nhận: ${JSON.stringify(record.budgetTickets)}`;
+  }
+  if (record.budgetVnd !== undefined && (typeof record.budgetVnd !== "number" || !Number.isFinite(record.budgetVnd))) {
+    return `budgetVnd phải là số hữu hạn, nhận: ${JSON.stringify(record.budgetVnd)}`;
+  }
+  if (
+    record.predictionKind !== undefined &&
+    record.predictionKind !== "single_ticket" &&
+    record.predictionKind !== "portfolio"
+  ) {
+    return `predictionKind phải là "single_ticket" hoặc "portfolio", nhận: ${JSON.stringify(record.predictionKind)}`;
+  }
+  if (
+    record.predictions !== undefined &&
+    (!Array.isArray(record.predictions) || !record.predictions.every((p) => typeof p === "string"))
+  ) {
+    return `predictions phải là mảng chuỗi, nhận: ${JSON.stringify(record.predictions)}`;
+  }
+  if (record.preRegistered !== undefined && typeof record.preRegistered !== "boolean") {
+    return `preRegistered phải là boolean, nhận: ${JSON.stringify(record.preRegistered)}`;
+  }
+  if (record.dataCutoffDrawId !== undefined && typeof record.dataCutoffDrawId !== "string") {
+    return `dataCutoffDrawId phải là chuỗi, nhận: ${JSON.stringify(record.dataCutoffDrawId)}`;
+  }
+  if (record.dataCutoffDate !== undefined && typeof record.dataCutoffDate !== "string") {
+    return `dataCutoffDate phải là chuỗi, nhận: ${JSON.stringify(record.dataCutoffDate)}`;
+  }
+  if (
+    record.rankingScoreVersion !== undefined &&
+    record.rankingScoreVersion !== null &&
+    typeof record.rankingScoreVersion !== "string"
+  ) {
+    return `rankingScoreVersion phải là chuỗi hoặc null, nhận: ${JSON.stringify(record.rankingScoreVersion)}`;
+  }
+  return null;
+}
+
 export function parseExperimentRegistry(text: string): ExperimentRecord[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as ExperimentRecord);
+    .map((line, index) => {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      const problem = describeExperimentRecordProblem(parsed);
+      if (problem) {
+        throw new Error(`Registry hỏng ở dòng ${index + 1}: ${problem}`);
+      }
+      return parsed as ExperimentRecord;
+    });
 }
 
 export function registryHasExperiment(records: ExperimentRecord[], experimentId: string): boolean {
@@ -163,6 +232,10 @@ export type ExperimentArtifact = {
     confidenceInterval: [number, number] | [];
     pValue: number | null;
     adjustedPValue: number | null;
+    /** How the SE behind pValue/CI was computed — "newey-west-hac" since the audit-forensics HAC fix. */
+    varianceMethod: string;
+    /** hacBandwidth(n, lookback) for the TEST-phase trial count actually used — the lag the HAC estimator ran with. */
+    hacLag: number | null;
   };
   controls: Record<string, unknown>;
   runtime: { startedAt: string; finishedAt: string; durationMs: number };
@@ -205,6 +278,12 @@ export function buildExperimentArtifactsFromReport(input: {
     expectedMatches: EXPECTED_MATCHES,
     protocolLock,
     latestDrawEvidence: protocolLock && latestDrawId ? classifyEvidence(latestDrawId, protocolLock) : null,
+    // Multiple-testing/HAC provenance (audit-forensics v3/v4 fixes) — persisted so an
+    // artifact is self-describing without needing to re-derive it from the live report.
+    familySize: report.familySize,
+    lookCount: report.lookCount,
+    nominalAlpha: report.nominalAlpha,
+    spentAlpha: report.alpha,
     ...input.controls,
   };
   const strategies = [...new Set(report.results.map((r) => r.strategy))].filter((s) => s !== "RANDOM");
@@ -241,6 +320,8 @@ export function buildExperimentArtifactsFromReport(input: {
         confidenceInterval: testResult ? [testResult.ci95Low, testResult.ci95High] : [],
         pValue: testResult?.pValueVsRandom ?? null,
         adjustedPValue: testResult?.adjustedPValue ?? null,
+        varianceMethod: report.varianceMethod,
+        hacLag: testResult ? hacBandwidth(testResult.trials, report.lookback) : null,
       },
       controls,
       runtime: { startedAt, finishedAt, durationMs: Date.parse(finishedAt) - Date.parse(startedAt) },

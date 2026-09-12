@@ -11,9 +11,14 @@
  * toàn bộ tập test không làm đổi ứng viên được chọn") and is not
  * duplicated here.
  */
-import { runWalkForwardBacktest, STRATEGIES, type BacktestResult, type DrawRecord, type StrategyId } from "../analytics";
+import { createStrategyPick, runWalkForwardBacktest, STRATEGIES, type BacktestResult, type DrawRecord, type StrategyId } from "../analytics";
+import { evaluateTicket } from "../mega645";
 import { createRng, drawFairTicket } from "./rng";
 import { EXPECTED_MATCHES } from "./statistics";
+
+function mean(values: number[]): number {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
 
 function syntheticDataset(drawCount: number, seed: number): DrawRecord[] {
   const rng = createRng(seed);
@@ -154,4 +159,91 @@ export function runRandomBaselineControl(draws: DrawRecord[], lookback = 90): Ra
     absoluteDifference: Math.abs(observedMean - EXPECTED_MATCHES),
     trials: random?.trials ?? 0,
   };
+}
+
+export type LabelPermutationControlResult = {
+  trials: number;
+  lookback: number;
+  seed: number;
+  /** mean(matches) − EXPECTED_MATCHES under the TRUE ticket↔draw pairing. */
+  trueEdgeByStrategy: Record<Exclude<StrategyId, "RANDOM">, number>;
+  /** mean(matches) − EXPECTED_MATCHES after randomly permuting which trial's actual draw each frozen ticket is scored against. */
+  permutedEdgeByStrategy: Record<Exclude<StrategyId, "RANDOM">, number>;
+  /** True when every strategy's permuted |edge| sits within a small band of 0 — the label-permutation null. */
+  edgeCollapsedTowardNull: boolean;
+};
+
+/**
+ * Control E — label permutation. Builds the same walk-forward tickets
+ * `runWalkForwardBacktest` would (ticket for trial k computed only from
+ * history strictly before draw k, via `createStrategyPick`), then randomly
+ * permutes *which trial's actual draw result* each frozen ticket is scored
+ * against — i.e. shuffles the pairing between "ticket generated for draw i"
+ * and "the real outcome of draw i" within the walk-forward series, while the
+ * tickets themselves (and the history each was computed from) are left
+ * untouched. Any genuine predictive edge depends on the correct pairing; a
+ * relabeled pairing is statistically equivalent to scoring each ticket
+ * against an unrelated draw, so a strategy's average matches under the
+ * permutation should collapse toward EXPECTED_MATCHES (0.8) regardless of
+ * whatever edge it showed under the true pairing. As with the other
+ * controls in this file, this is a coarse sanity check, not a certified
+ * false-positive-rate measurement (see file header).
+ */
+export function runLabelPermutationControl(
+  draws: DrawRecord[],
+  lookback = 90,
+  seed = 645,
+): LabelPermutationControlResult {
+  const trialCount = draws.length - lookback;
+  const zeroEdge = Object.fromEntries(NON_RANDOM_STRATEGIES.map((id) => [id, 0])) as Record<
+    Exclude<StrategyId, "RANDOM">,
+    number
+  >;
+  if (trialCount <= 0) {
+    return {
+      trials: 0,
+      lookback,
+      seed,
+      trueEdgeByStrategy: zeroEdge,
+      permutedEdgeByStrategy: zeroEdge,
+      edgeCollapsedTowardNull: true,
+    };
+  }
+
+  const ticketsByStrategy: Record<Exclude<StrategyId, "RANDOM">, number[][]> = Object.fromEntries(
+    NON_RANDOM_STRATEGIES.map((id) => [id, [] as number[][]]),
+  ) as Record<Exclude<StrategyId, "RANDOM">, number[][]>;
+  const actualResults: number[][] = [];
+
+  for (let index = lookback; index < draws.length; index += 1) {
+    const history = draws.slice(index - lookback, index);
+    actualResults.push(draws[index].result);
+    for (const strategy of NON_RANDOM_STRATEGIES) {
+      ticketsByStrategy[strategy].push(createStrategyPick(history, strategy, seed));
+    }
+  }
+
+  const rng = createRng(seed);
+  const permutedIndex = Array.from({ length: trialCount }, (_, i) => i);
+  for (let i = permutedIndex.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [permutedIndex[i], permutedIndex[j]] = [permutedIndex[j], permutedIndex[i]];
+  }
+
+  const trueEdgeByStrategy = {} as Record<Exclude<StrategyId, "RANDOM">, number>;
+  const permutedEdgeByStrategy = {} as Record<Exclude<StrategyId, "RANDOM">, number>;
+
+  for (const strategy of NON_RANDOM_STRATEGIES) {
+    const tickets = ticketsByStrategy[strategy];
+    const trueMatches = tickets.map((ticket, k) => evaluateTicket(ticket, actualResults[k]).matches);
+    const permutedMatches = tickets.map((ticket, k) => evaluateTicket(ticket, actualResults[permutedIndex[k]]).matches);
+    trueEdgeByStrategy[strategy] = mean(trueMatches) - EXPECTED_MATCHES;
+    permutedEdgeByStrategy[strategy] = mean(permutedMatches) - EXPECTED_MATCHES;
+  }
+
+  const edgeCollapsedTowardNull = NON_RANDOM_STRATEGIES.every(
+    (id) => Math.abs(permutedEdgeByStrategy[id]) < 0.15,
+  );
+
+  return { trials: trialCount, lookback, seed, trueEdgeByStrategy, permutedEdgeByStrategy, edgeCollapsedTowardNull };
 }

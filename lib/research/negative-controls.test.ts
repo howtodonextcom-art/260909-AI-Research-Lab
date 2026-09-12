@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runIidSyntheticControl, runRandomBaselineControl, runTimeShuffleControl } from "./negative-controls";
+import {
+  runIidSyntheticControl,
+  runLabelPermutationControl,
+  runRandomBaselineControl,
+  runTimeShuffleControl,
+} from "./negative-controls";
 import { createRng, drawFairTicket } from "./rng";
 import type { DrawRecord } from "../analytics";
 
@@ -68,4 +73,49 @@ test("Control C (random baseline): trung bình khớp của RANDOM gần 0.8 k�
   // 32-sample-averaged RANDOM over ~300 draws: expect the mean to land close
   // to 0.8, well within a generous tolerance for a coarse control.
   assert.ok(result.absoluteDifference < 0.15, `|observed - expected| = ${result.absoluteDifference} quá lớn`);
+});
+
+test("Control E (label permutation): xáo trộn cặp vé-kết quả, edge phải sụp về gần EXPECTED_MATCHES", () => {
+  const draws = syntheticDraws(400, 321);
+  const result = runLabelPermutationControl(draws, 90, 645);
+  assert.equal(result.lookback, 90);
+  assert.equal(result.seed, 645);
+  assert.ok(result.trials > 0);
+  for (const id of ["HOT", "COLD", "BALANCED"] as const) {
+    assert.ok(Number.isFinite(result.trueEdgeByStrategy[id]));
+    assert.ok(Number.isFinite(result.permutedEdgeByStrategy[id]));
+    // Under a synthetic IID series there is no real temporal structure to
+    // begin with, so the permuted edge should be small in absolute terms —
+    // this is the label-permutation null the control is meant to check.
+    assert.ok(
+      Math.abs(result.permutedEdgeByStrategy[id]) < 0.15,
+      `${id} permuted edge ${result.permutedEdgeByStrategy[id]} có vẻ cao bất thường dưới hoán vị nhãn`,
+    );
+  }
+  assert.equal(result.edgeCollapsedTowardNull, true);
+});
+
+test("Control E tái lập được với cùng seed (xáo trộn nhãn xác định theo seed)", () => {
+  const draws = syntheticDraws(300, 11);
+  const a = runLabelPermutationControl(draws, 60, 99);
+  const b = runLabelPermutationControl(draws, 60, 99);
+  assert.deepEqual(a, b);
+});
+
+test("Control E: seed khác nhau cho hoán vị khác nhau (không phải hằng số ẩn)", () => {
+  const draws = syntheticDraws(300, 5);
+  const a = runLabelPermutationControl(draws, 60, 1);
+  const b = runLabelPermutationControl(draws, 60, 2);
+  assert.notDeepEqual(a.permutedEdgeByStrategy, b.permutedEdgeByStrategy);
+});
+
+test("Control E: dữ liệu ngắn hơn lookback trả về trials=0 một cách an toàn, không NaN/throw", () => {
+  const draws = syntheticDraws(50, 7);
+  const result = runLabelPermutationControl(draws, 90, 645);
+  assert.equal(result.trials, 0);
+  assert.equal(result.edgeCollapsedTowardNull, true);
+  for (const id of ["HOT", "COLD", "BALANCED"] as const) {
+    assert.equal(result.trueEdgeByStrategy[id], 0);
+    assert.equal(result.permutedEdgeByStrategy[id], 0);
+  }
 });

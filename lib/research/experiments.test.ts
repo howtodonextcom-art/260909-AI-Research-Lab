@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runTemporalBacktestReport, type DrawRecord } from "../analytics";
+import { hacBandwidth, runTemporalBacktestReport, type DrawRecord } from "../analytics";
 import { createRng, drawFairTicket } from "./rng";
 import {
   FALLBACK_HOLM_FAMILY_SIZE,
@@ -100,6 +100,36 @@ test("buildExperimentArtifactsFromReport tạo một artifact mỗi chiến lư�
   }
 });
 
+test("buildExperimentArtifactsFromReport ghim varianceMethod/hacLag/familySize/lookCount/spentAlpha từ report, không tính lại", () => {
+  const draws = syntheticDraws(400, 645);
+  const familySize = 5; // deliberately different from the visible 3, to prove it's threaded through, not recomputed
+  const lookCount = 2;
+  const report = runTemporalBacktestReport(draws, 90, 0.05, familySize, lookCount);
+  const artifacts = buildExperimentArtifactsFromReport({
+    report,
+    datasetSha256: "sha-abc",
+    gitCommit: "commit-abc",
+    seed: 645,
+    experimentIdFor: (strategy) => `exp-${strategy}`,
+    runtime: { startedAt: "2026-09-12T00:00:00.000Z", finishedAt: "2026-09-12T00:00:01.000Z" },
+    protocolHash: "hash-abc",
+  });
+
+  assert.ok(artifacts.length > 0);
+  for (const artifact of artifacts) {
+    assert.equal(artifact.statistics.varianceMethod, "newey-west-hac");
+    assert.equal(artifact.statistics.varianceMethod, report.varianceMethod);
+    const testTrials = artifact.temporalSplit.test.trials;
+    const expectedLag = testTrials > 0 ? hacBandwidth(testTrials, report.lookback) : null;
+    assert.equal(artifact.statistics.hacLag, expectedLag);
+    assert.equal(artifact.controls.familySize, familySize);
+    assert.equal(artifact.controls.familySize, report.familySize);
+    assert.equal(artifact.controls.lookCount, lookCount);
+    assert.equal(artifact.controls.nominalAlpha, 0.05);
+    assert.equal(artifact.controls.spentAlpha, report.alpha);
+  }
+});
+
 test("registry parse + idempotent lookup theo experimentId", () => {
   const line = JSON.stringify({
     experimentId: "exp-1",
@@ -112,6 +142,72 @@ test("registry parse + idempotent lookup theo experimentId", () => {
   assert.equal(registryHasExperiment(records, "exp-missing"), false);
   assert.equal(countFamilyExperiments(records, "family-1"), 1);
   assert.equal(countFamilyExperiments(records, "other"), 0);
+});
+
+test("parseExperimentRegistry: dòng kiểu cũ không có trường pre-registration vẫn parse bình thường", () => {
+  const line = JSON.stringify({
+    experimentId: "exp-old",
+    hypothesisId: "HOT-vs-random",
+    familyId: "family-1",
+    strategyId: "HOT",
+    strategyVersion: "v1",
+    parameters: { lookback: 90 },
+    seed: 645,
+    datasetHash: "abc",
+    protocolVersion: "v1",
+    protocolHash: "def",
+    registeredAt: "2026-09-12T00:00:00.000Z",
+    status: "COMPLETED",
+  });
+  const records = parseExperimentRegistry(line);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].budgetTickets, undefined);
+  assert.equal(records[0].preRegistered, undefined);
+});
+
+test("parseExperimentRegistry: dòng kiểu mới với trường pre-registration hợp lệ parse và round-trip đúng", () => {
+  const record = {
+    experimentId: "exp-new",
+    hypothesisId: "HOT-vs-random",
+    familyId: "family-1",
+    strategyId: "HOT",
+    strategyVersion: "v1",
+    parameters: { lookback: 90 },
+    seed: 645,
+    datasetHash: "abc",
+    protocolVersion: "v1",
+    protocolHash: "def",
+    registeredAt: "2026-09-12T00:00:00.000Z",
+    status: "REGISTERED",
+    budgetTickets: 30,
+    budgetVnd: 300000,
+    predictionKind: "portfolio",
+    predictions: ["01 02 03 04 05 06", "02 03 04 05 06 07"],
+    preRegistered: true,
+    dataCutoffDrawId: "01561",
+    dataCutoffDate: "2026-09-11",
+    rankingScoreVersion: null,
+  };
+  const records = parseExperimentRegistry(JSON.stringify(record));
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0], record);
+});
+
+test("parseExperimentRegistry: trường pre-registration sai kiểu bị từ chối rõ ràng, không âm thầm chấp nhận hay rơi rớt", () => {
+  const badBudget = JSON.stringify({ experimentId: "exp-bad", familyId: "family-1", budgetTickets: "not a number" });
+  assert.throws(() => parseExperimentRegistry(badBudget), /budgetTickets/);
+
+  const badKind = JSON.stringify({ experimentId: "exp-bad-2", familyId: "family-1", predictionKind: "quantum" });
+  assert.throws(() => parseExperimentRegistry(badKind), /predictionKind/);
+
+  const badPredictions = JSON.stringify({ experimentId: "exp-bad-3", familyId: "family-1", predictions: [1, 2, 3] });
+  assert.throws(() => parseExperimentRegistry(badPredictions), /predictions/);
+
+  const badPreRegistered = JSON.stringify({ experimentId: "exp-bad-4", familyId: "family-1", preRegistered: "yes" });
+  assert.throws(() => parseExperimentRegistry(badPreRegistered), /preRegistered/);
+
+  const badRankingVersion = JSON.stringify({ experimentId: "exp-bad-5", familyId: "family-1", rankingScoreVersion: 123 });
+  assert.throws(() => parseExperimentRegistry(badRankingVersion), /rankingScoreVersion/);
 });
 
 test("resolveHolmFamilySize đếm giả thuyết, không đếm experimentId", () => {

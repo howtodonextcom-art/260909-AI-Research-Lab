@@ -1,9 +1,9 @@
 {
   "experimentId": "protocol-2026-09-10.1-primary-strategies-hot-8e26f348",
-  "gitCommit": "d9dfc09e583732d1f1180a23aa599c74b94e8cd0",
+  "gitCommit": "969cee56e18fa4489cc97023d6f5a7586313ac28",
   "datasetSha256": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
   "protocolVersion": "2026-09-10.1",
-  "protocolHash": "089e16b90b1d168e69142faf678b5bc66e831310cf99b30c4f0db259c27badef",
+  "protocolHash": "9b864bec07e355e042029cff3553716ba454e89b01d0860773ea47de772dfe52",
   "strategy": {
     "id": "HOT",
     "version": "2026-09-10.1",
@@ -42,12 +42,29 @@
       0.061157373442264934
     ],
     "pValue": 0.666157038710811,
-    "adjustedPValue": 1
+    "adjustedPValue": 1,
+    "varianceMethod": "newey-west-hac",
+    "hacLag": 7
   },
-  "controls": {},
+  "controls": {
+    "primaryEndpoint": "mean_matched_numbers_per_ticket",
+    "expectedMatches": 0.7999999999999998,
+    "protocolLock": {
+      "protocolVersion": "2026-09-10.1",
+      "protocolHash": "9b864bec07e355e042029cff3553716ba454e89b01d0860773ea47de772dfe52",
+      "protocolLockedAt": "2026-09-12T16:49:27.194Z",
+      "protocolDatasetHash": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
+      "prospectiveStartDrawId": "01562"
+    },
+    "latestDrawEvidence": "RETROSPECTIVE",
+    "familySize": 3,
+    "lookCount": 1,
+    "nominalAlpha": 0.05,
+    "spentAlpha": 0.05
+  },
   "runtime": {
-    "startedAt": "2026-09-11T18:06:36.472Z",
-    "finishedAt": "2026-09-11T18:06:36.639Z",
-    "durationMs": 167
+    "startedAt": "2026-09-12T18:32:15.573Z",
+    "finishedAt": "2026-09-12T18:32:15.755Z",
+    "durationMs": 182
   }
 }

@@ -1,17 +1,22 @@
 /**
- * `npm run research:controls` — run negative controls A/B/C and print the
+ * `npm run research:controls` — run negative controls A/B/C/E and print the
  * exact null contract (PRIMARY_ENDPOINT / EXPECTED_MATCHES).
  */
 import { fileURLToPath } from "node:url";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
-import { runIidSyntheticControl, runRandomBaselineControl, runTimeShuffleControl } from "../lib/research/negative-controls";
+import {
+  runIidSyntheticControl,
+  runLabelPermutationControl,
+  runRandomBaselineControl,
+  runTimeShuffleControl,
+} from "../lib/research/negative-controls";
 import { EXPECTED_MATCHES, PRIMARY_ENDPOINT } from "../lib/research/statistics";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const paths = resolvePaths(projectRoot);
 const snapshot = await loadSnapshot(paths);
 
-console.log("\nNEGATIVE CONTROLS A/B/C");
+console.log("\nNEGATIVE CONTROLS A/B/C/E");
 console.log(`  Endpoint: ${PRIMARY_ENDPOINT.id}`);
 console.log(`  EXPECTED_MATCHES: ${EXPECTED_MATCHES}`);
 
@@ -44,4 +49,17 @@ console.log("    Nếu edge sau shuffle vẫn lớn và giống hệt gốc → 
 const controlC = runRandomBaselineControl(snapshot.records, 90);
 console.log("\n  C — RANDOM vs exact null");
 console.log(`    observed=${controlC.observedMean.toFixed(4)} expected=${controlC.expectedMean.toFixed(4)} |Δ|=${controlC.absoluteDifference.toFixed(4)}`);
+
+const controlE = runLabelPermutationControl(snapshot.records, 90, 645);
+console.log("\n  E — label permutation (xáo trộn cặp vé-kết quả)");
+console.log(`    trials=${controlE.trials} seed=${controlE.seed}`);
+console.log("    strategy | edge_true (vs 0.8) | edge_permuted (vs 0.8)");
+for (const strategy of Object.keys(controlE.trueEdgeByStrategy) as Array<keyof typeof controlE.trueEdgeByStrategy>) {
+  console.log(
+    `    ${strategy.padEnd(8)} | ${controlE.trueEdgeByStrategy[strategy].toFixed(4).padStart(18)} | ${controlE.permutedEdgeByStrategy[strategy].toFixed(4).padStart(22)}`,
+  );
+}
+console.log(`    edgeCollapsedTowardNull=${controlE.edgeCollapsedTowardNull} (mọi |edge hoán vị| < 0.15)`);
+console.log("    Nếu edge sau hoán vị vẫn lớn → nghi tín hiệu giả / bug pipeline.");
+
 console.log("\n  Xong.");

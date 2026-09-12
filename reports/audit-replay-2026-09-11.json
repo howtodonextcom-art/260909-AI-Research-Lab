@@ -1,0 +1,706 @@
+﻿{
+  "audit": "audit-replay-2026-09-11",
+  "t0": {
+    "drawDateLock": "drawDate < 2026-09-11",
+    "cutoffDrawId": "01560",
+    "cutoffDrawDate": "2026-09-09",
+    "historyCount": 1560,
+    "datasetHashFrozenHistory": "8ff2438cac38f89096f09d2978b12461bdc690bc6ed8b3fdb53f193f935b2681",
+    "fullSnapshotShaNote": "Full on-disk snapshot includes #01561; replay uses frozen subset hash above.",
+    "algorithmVersion": "2026-09-10.1",
+    "protocolHash": "9b864bec07e355e042029cff3553716ba454e89b01d0860773ea47de772dfe52",
+    "seed": 645,
+    "lookback": 90,
+    "generatedAt": "2026-09-12T17:59:52.158Z"
+  },
+  "freezeHash": "7f09eb610d919144678c930844b904118fae91cbb01957782258311a712736ad",
+  "frozenTickets": {
+    "HOT": "06 16 22 31 36 44",
+    "COLD": "01 05 18 25 34 40",
+    "BALANCED": "03 11 20 26 38 41",
+    "RANDOM": "02 11 14 15 21 30"
+  },
+  "official": {
+    "id": "01561",
+    "date": "2026-09-11",
+    "result": [
+      14,
+      18,
+      20,
+      21,
+      26,
+      27
+    ],
+    "source": "public/data/power645.jsonl snapshot",
+    "liveCrossCheck": "SKIPPED_IN_AUDIT_SCRIPT (snapshot authoritative; 403 risk on live)"
+  },
+  "strategyScores": [
+    {
+      "strategy": "HOT",
+      "ticket": "06 16 22 31 36 44",
+      "matches": 0,
+      "matchedNumbers": [],
+      "tier": "NONE",
+      "payout": 0,
+      "cost": 10000,
+      "netFixed": -10000
+    },
+    {
+      "strategy": "COLD",
+      "ticket": "01 05 18 25 34 40",
+      "matches": 1,
+      "matchedNumbers": [
+        "18"
+      ],
+      "tier": "NONE",
+      "payout": 0,
+      "cost": 10000,
+      "netFixed": -10000
+    },
+    {
+      "strategy": "BALANCED",
+      "ticket": "03 11 20 26 38 41",
+      "matches": 2,
+      "matchedNumbers": [
+        "20",
+        "26"
+      ],
+      "tier": "NONE",
+      "payout": 0,
+      "cost": 10000,
+      "netFixed": -10000
+    },
+    {
+      "strategy": "RANDOM",
+      "ticket": "02 11 14 15 21 30",
+      "matches": 2,
+      "matchedNumbers": [
+        "14",
+        "21"
+      ],
+      "tier": "NONE",
+      "payout": 0,
+      "cost": 10000,
+      "netFixed": -10000
+    }
+  ],
+  "portfolioScores": [
+    {
+      "name": "projective_10",
+      "ticketCount": 10,
+      "cost": 100000,
+      "coveredPairs": 150,
+      "bestMatches": 2,
+      "fixedPayout": 0,
+      "perTicket": [
+        {
+          "index": 1,
+          "ticket": "03 18 26 32 36 42",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 2,
+          "ticket": "03 05 10 11 22 37",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 3,
+          "ticket": "04 21 22 26 28 35",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 4,
+          "ticket": "01 04 05 07 18 44",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 5,
+          "ticket": "08 11 20 28 36 44",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 6,
+          "ticket": "05 08 12 24 26 29",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 7,
+          "ticket": "01 11 26 41 43 45",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 8,
+          "ticket": "07 16 20 26 37 40",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 9,
+          "ticket": "01 03 12 16 28 34",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 10,
+          "ticket": "11 18 21 24 34 40",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        }
+      ]
+    },
+    {
+      "name": "projective_20",
+      "ticketCount": 20,
+      "cost": 200000,
+      "coveredPairs": 300,
+      "bestMatches": 2,
+      "fixedPayout": 0,
+      "perTicket": [
+        {
+          "index": 1,
+          "ticket": "04 17 22 24 28 30",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 2,
+          "ticket": "13 24 33 35 43 45",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 3,
+          "ticket": "13 15 19 22 23 26",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 4,
+          "ticket": "14 17 26 33 41 42",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 5,
+          "ticket": "09 15 28 39 42 43",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 6,
+          "ticket": "05 13 14 20 28 37",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 7,
+          "ticket": "02 04 15 32 33 37",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 8,
+          "ticket": "01 02 08 13 30 42",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 9,
+          "ticket": "08 09 10 20 22 33",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 10,
+          "ticket": "11 15 20 30 35 41",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 11,
+          "ticket": "02 11 14 22 39 45",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 12,
+          "ticket": "10 14 23 30 32 43",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 13,
+          "ticket": "05 18 22 32 35 42",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 14,
+          "ticket": "09 18 26 30 37 45",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 15,
+          "ticket": "04 05 08 11 26 43",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 16,
+          "ticket": "01 04 09 14 19 35",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 17,
+          "ticket": "01 20 24 26 32 39",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 18,
+          "ticket": "08 19 28 32 41 45",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 19,
+          "ticket": "02 05 09 23 24 41",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 20,
+          "ticket": "08 14 15 18 24 40",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        }
+      ]
+    },
+    {
+      "name": "projective_30",
+      "ticketCount": 30,
+      "cost": 300000,
+      "coveredPairs": 450,
+      "bestMatches": 3,
+      "fixedPayout": 60000,
+      "perTicket": [
+        {
+          "index": 1,
+          "ticket": "13 14 15 23 24 35",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 2,
+          "ticket": "04 09 14 17 30 39",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 3,
+          "ticket": "01 09 15 21 26 32",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 4,
+          "ticket": "06 11 23 26 39 45",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 5,
+          "ticket": "03 09 10 23 31 40",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 6,
+          "ticket": "09 20 27 29 35 45",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 7,
+          "ticket": "04 05 06 15 20 40",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 8,
+          "ticket": "02 05 09 11 13 16",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 9,
+          "ticket": "06 10 13 21 27 30",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 10,
+          "ticket": "11 14 20 21 31 37",
+          "matches": 3,
+          "tier": "THIRD",
+          "payout": 30000
+        },
+        {
+          "index": 11,
+          "ticket": "05 17 23 27 32 37",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 12,
+          "ticket": "11 30 32 35 38 40",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 13,
+          "ticket": "02 17 21 24 40 45",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 14,
+          "ticket": "05 24 26 29 30 31",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 15,
+          "ticket": "01 05 10 14 38 45",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 16,
+          "ticket": "14 16 25 26 27 40",
+          "matches": 3,
+          "tier": "THIRD",
+          "payout": 30000
+        },
+        {
+          "index": 17,
+          "ticket": "04 13 25 31 32 45",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 18,
+          "ticket": "10 11 15 17 25 29",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 19,
+          "ticket": "02 04 10 26 35 37",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 20,
+          "ticket": "03 13 17 20 26 38",
+          "matches": 2,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 21,
+          "ticket": "01 13 29 37 39 40",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 22,
+          "ticket": "04 16 21 23 29 38",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 23,
+          "ticket": "02 15 27 31 38 39",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 24,
+          "ticket": "10 16 20 24 32 39",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 25,
+          "ticket": "02 03 06 14 29 32",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 26,
+          "ticket": "06 09 24 25 37 38",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 27,
+          "ticket": "03 05 21 25 35 39",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 28,
+          "ticket": "01 06 16 17 31 35",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 29,
+          "ticket": "03 15 16 30 37 45",
+          "matches": 0,
+          "tier": "NONE",
+          "payout": 0
+        },
+        {
+          "index": 30,
+          "ticket": "01 02 20 23 25 30",
+          "matches": 1,
+          "tier": "NONE",
+          "payout": 0
+        }
+      ]
+    }
+  ],
+  "temporalSummary": {
+    "protocolVersion": "2026-09-10.1",
+    "alpha": 0.05,
+    "candidate": null,
+    "reliability": [
+      {
+        "strategy": "HOT",
+        "selectedOnValidation": false,
+        "validationEdge": -0.08438351498637608,
+        "validationAdjustedPValue": 1,
+        "testEdge": -0.01384171195652173,
+        "testAdjustedPValue": 1,
+        "testCi95Low": -0.09204181304063477,
+        "testCi95High": 0.06435838912759131,
+        "verdict": "NO_EDGE"
+      },
+      {
+        "strategy": "COLD",
+        "selectedOnValidation": false,
+        "validationEdge": -0.005364441416893739,
+        "validationAdjustedPValue": 1,
+        "testEdge": -0.030146059782608647,
+        "testAdjustedPValue": 1,
+        "testCi95Low": -0.11604685142756171,
+        "testCi95High": 0.05575473186234442,
+        "verdict": "NO_EDGE"
+      },
+      {
+        "strategy": "BALANCED",
+        "selectedOnValidation": false,
+        "validationEdge": 0.05458106267029972,
+        "validationAdjustedPValue": 0.25904201014251516,
+        "testEdge": 0.013332201086956541,
+        "testAdjustedPValue": 1,
+        "testCi95Low": -0.06603096535337116,
+        "testCi95High": 0.09269536752728424,
+        "verdict": "NO_EDGE"
+      }
+    ],
+    "testPhase": [
+      {
+        "strategy": "HOT",
+        "edgeVsRandom": -0.01384171195652173,
+        "pValueVsRandom": 0.6356769924345602,
+        "adjustedPValue": 1,
+        "significantAfterCorrection": false,
+        "ci95Low": -0.09204181304063477,
+        "ci95High": 0.06435838912759131,
+        "averageMatches": 0.7907608695652174,
+        "roi": -91.84782608695652
+      },
+      {
+        "strategy": "COLD",
+        "edgeVsRandom": -0.030146059782608647,
+        "pValueVsRandom": 0.7542243103010347,
+        "adjustedPValue": 1,
+        "significantAfterCorrection": false,
+        "ci95Low": -0.11604685142756171,
+        "ci95High": 0.05575473186234442,
+        "averageMatches": 0.7744565217391305,
+        "roi": -95.1086956521739
+      },
+      {
+        "strategy": "BALANCED",
+        "edgeVsRandom": 0.013332201086956541,
+        "pValueVsRandom": 0.3709796657027902,
+        "adjustedPValue": 1,
+        "significantAfterCorrection": false,
+        "ci95Low": -0.06603096535337116,
+        "ci95High": 0.09269536752728424,
+        "averageMatches": 0.8179347826086957,
+        "roi": -91.84782608695652
+      }
+    ]
+  },
+  "bao18": {
+    "n": 18,
+    "tickets": 18564,
+    "cost": 185640000,
+    "pJackpotExact": 0.0022791728974372195,
+    "singleTicketFixedEv": 1369.8978276403122,
+    "naiveFixedEvTimesTickets": 25430783.272314757,
+    "note": "Fixed-tier EV per fair ticket is negative; bao multiplies spend without creating an algorithmic edge."
+  },
+  "projectiveFrontier": [
+    {
+      "n": 10,
+      "cost": 100000,
+      "coveredPairsProjective": 150,
+      "coveredPairsRandom": 143,
+      "exactPAtLeast4": 0.013934826753885176,
+      "exactPAtLeast5": 0.0002885184393976226,
+      "exactPJackpot": 0.0000012277380399898835,
+      "costVsBaoRatio": 0.0005386770092652446,
+      "ticketsVsBaoRatio": 0.0005386770092652446
+    },
+    {
+      "n": 20,
+      "cost": 200000,
+      "coveredPairsProjective": 300,
+      "coveredPairsRandom": 263,
+      "exactPAtLeast4": 0.02786965350777035,
+      "exactPAtLeast5": 0.0005770368787952452,
+      "exactPJackpot": 0.000002455476079979767,
+      "costVsBaoRatio": 0.0010773540185304892,
+      "ticketsVsBaoRatio": 0.0010773540185304892
+    },
+    {
+      "n": 30,
+      "cost": 300000,
+      "coveredPairsProjective": 450,
+      "coveredPairsRandom": 368,
+      "exactPAtLeast4": 0.04180448026165553,
+      "exactPAtLeast5": 0.0008655553181928678,
+      "exactPJackpot": 0.0000036832141199696505,
+      "costVsBaoRatio": 0.0016160310277957336,
+      "ticketsVsBaoRatio": 0.0016160310277957336
+    }
+  ],
+  "portfolioMcSameBudget": [
+    {
+      "n": 10,
+      "sims": 5000,
+      "portfolioMeanBestMatch": 2.052,
+      "randomMeanBestMatch": 2.0764,
+      "portfolioHit4Rate": 0.0134,
+      "randomHit4Rate": 0.0128,
+      "portfolioHit5Rate": 0,
+      "randomHit5Rate": 0
+    },
+    {
+      "n": 20,
+      "sims": 5000,
+      "portfolioMeanBestMatch": 2.375,
+      "randomMeanBestMatch": 2.3892,
+      "portfolioHit4Rate": 0.0238,
+      "randomHit4Rate": 0.0278,
+      "portfolioHit5Rate": 0.0002,
+      "randomHit5Rate": 0.0002
+    },
+    {
+      "n": 30,
+      "sims": 5000,
+      "portfolioMeanBestMatch": 2.5786,
+      "randomMeanBestMatch": 2.5476,
+      "portfolioHit4Rate": 0.0414,
+      "randomHit4Rate": 0.037,
+      "portfolioHit5Rate": 0.0006,
+      "randomHit5Rate": 0.0006
+    }
+  ],
+  "fixedTier": {
+    "singleTicketFixedEv": 1369.8978276403122,
+    "matchProbabilities": {
+      "0": 0.40056463672459136,
+      "1": 0.4241272624142732,
+      "2": 0.15147402229081186,
+      "3": 0.02244059589493509,
+      "4": 0.0013646308314487555,
+      "5": 0.00002872907013576327,
+      "6": 1.2277380399898834e-7
+    },
+    "jackpotVariable": true,
+    "verdict": "FIXED_TIER_EV_NEGATIVE"
+  },
+  "topN": "CURRENT SYSTEM CANNOT PRODUCE THIS RESULT ΓÇö no rankingScore / Top-N engine in source",
+  "scientificNote": "Single-draw match counts are OBSERVED only. They do not demonstrate predictive edge."
+}
