@@ -12,8 +12,9 @@ import { execFileSync } from "node:child_process";
 import { mkdir, appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runTemporalBacktestReport } from "../lib/analytics";
+import { createStrategyPick, runTemporalBacktestReport } from "../lib/analytics";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
+import { MEGA_645 } from "../lib/mega645";
 import {
   buildExperimentArtifactsFromReport,
   buildExperimentFamilySummary,
@@ -89,12 +90,23 @@ for (const strategy of strategies) {
   experimentIds.set(strategy, `${familyId}-${strategy.toLowerCase()}-${datasetHash.slice(0, 8)}`);
 }
 
+// The one honestly-derivable "prediction" at registration time: what the
+// strategy actually outputs right now, given the full current dataset as its
+// lookback window — i.e. its pick for the draw immediately after
+// `latestDrawId`. Not a pre-registered prospective bet (that lives in
+// `reports/prospective-scorecard.jsonl` via `research:prospective-freeze`);
+// this is descriptive provenance for a retrospective registration.
+const cutoffHistory = snapshot.records.slice(-CURRENT_PROTOCOL.lookback);
+const latestDrawDate = snapshot.records.at(-1)?.date ?? null;
+
 for (const strategy of strategies) {
   const experimentId = experimentIds.get(strategy)!;
   if (registryHasExperiment(existing, experimentId)) {
     console.log(`  Bỏ qua ${experimentId} (đã có trong registry)`);
     continue;
   }
+  const prediction =
+    cutoffHistory.length > 0 ? createStrategyPick(cutoffHistory, strategy as never, seed) : null;
   const registered = registerExperiment({
     experimentId,
     hypothesisId: `${strategy}-vs-random`,
@@ -106,6 +118,20 @@ for (const strategy of strategies) {
     datasetHash,
     protocolVersion: CURRENT_PROTOCOL.version,
     protocolHash,
+    // Pre-registration fields (§31/§35). `preRegistered: false` is honest,
+    // not an oversight: this script registers an experiment AGAINST DATA
+    // ALREADY KNOWN (the dataset up to `latestDrawId`), so this is a
+    // retrospective registration, never a bet placed before seeing the
+    // outcome. A genuinely pre-registered bet is what
+    // `research:prospective-freeze` records instead.
+    budgetTickets: 1,
+    budgetVnd: MEGA_645.ticketPrice,
+    predictionKind: "single_ticket",
+    ...(prediction ? { predictions: prediction.map((n) => String(n).padStart(2, "0")) } : {}),
+    preRegistered: false,
+    ...(latestDrawId ? { dataCutoffDrawId: latestDrawId } : {}),
+    ...(latestDrawDate ? { dataCutoffDate: latestDrawDate } : {}),
+    rankingScoreVersion: null,
   });
   const completed = transitionExperiment(registered, "COMPLETED");
   await appendFile(registryPath, `${JSON.stringify(completed)}\n`, "utf8");

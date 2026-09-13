@@ -118,7 +118,25 @@ export function optimizePortfolio(ticketCount: number, seed = 645): number[][] {
  * call it with a ticket count from a portfolio that was not built or
  * validated this way (§30/§31).
  */
-export function calculatePortfolioOdds(ticketCount: number): PortfolioOdds {
+/**
+ * Exact union probabilities for a portfolio that satisfies pairwise
+ * intersection ≤ 1 (projective-plane construction). Prefer passing the
+ * validated ticket list; a bare count is accepted only as a convenience for
+ * that construction and still documents the same precondition.
+ */
+export function calculatePortfolioOdds(ticketsOrCount: number | number[][]): PortfolioOdds {
+  let ticketCount: number;
+  if (typeof ticketsOrCount === "number") {
+    ticketCount = ticketsOrCount;
+  } else {
+    if (!validatePortfolio(ticketsOrCount)) {
+      throw new Error(
+        "calculatePortfolioOdds yêu cầu portfolio hợp lệ (1–30 vé, pairwise giao ≤ 1). " +
+          "Xác suất tuyến tính chỉ đúng dưới điều kiện đó.",
+      );
+    }
+    ticketCount = ticketsOrCount.length;
+  }
   if (!Number.isInteger(ticketCount) || ticketCount < 1 || ticketCount > 30) throw new Error("Số vé không hợp lệ.");
   const total = choose(45, 6);
   const single4 = outcomes.slice(4).reduce((sum, outcome) => sum + outcome.combinations, 0) / total;

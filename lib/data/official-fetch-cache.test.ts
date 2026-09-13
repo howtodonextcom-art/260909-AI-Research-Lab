@@ -92,13 +92,42 @@ test("handleDataRefresh lần 2 trong TTL không hit official; force vẫn hit",
   const second = await handleDataRefresh({ records: [] }, { adapter, cache });
   assert.equal(adapter.calls, 1, "lần 2 trong TTL không gọi lại official; body.records không phải cache key");
   assert.equal(second.summary.status, "ok");
-  await handleDataRefresh({ records: [], force: true }, { adapter, cache });
+  await handleDataRefresh({ records: [], force: true }, { adapter, cache, allowForce: true });
   assert.equal(adapter.calls, 2);
+});
+
+test("handleDataRefresh bỏ qua force trên đường public (allowForce mặc định false)", async () => {
+  const adapter = new CountingAdapter();
+  const cache = createMemoryOfficialFetchCache();
+  await handleDataRefresh({ records: [] }, { adapter, cache });
+  assert.equal(adapter.calls, 1);
+  await handleDataRefresh({ records: [], force: true }, { adapter, cache });
+  assert.equal(adapter.calls, 1, "force không có allowForce không được phá cache");
+});
+
+test("hai cache miss đồng thời chỉ tạo một upstream call (single-flight in-process)", async () => {
+  const adapter = new CountingAdapter();
+  const cache = createMemoryOfficialFetchCache();
+  const wrapped = wrapAdapterWithOfficialFetchCache(adapter, { store: cache });
+  await Promise.all([wrapped.fetchAll(), wrapped.fetchAll()]);
+  assert.equal(adapter.calls, 1);
+});
+
+test("parseRefreshRequest từ chối force công khai và records quá lớn", async () => {
+  const { parseRefreshRequest } = await import("./refresh-handler");
+  const forced = parseRefreshRequest({ force: true, records: [] }, { allowForce: false });
+  assert.equal(forced.ok, false);
+  if (!forced.ok) assert.equal(forced.status, 403);
+  const oversized = parseRefreshRequest({ records: Array.from({ length: 3_001 }, () => draw("00198", "2017-10-25")) });
+  assert.equal(oversized.ok, false);
+  if (!oversized.ok) assert.equal(oversized.status, 413);
 });
 
 test("route refresh bọc adapter official bằng cache injectable", () => {
   const route = readFileSync(path.join(fileURLToPath(new URL("../..", import.meta.url)), "app/api/data/refresh/route.ts"), "utf8");
   assert.match(route, /handleDataRefresh/);
+  assert.match(route, /parseRefreshRequest/);
+  assert.match(route, /allowForce:\s*false/);
   const handler = readFileSync(fileURLToPath(new URL("./refresh-handler.ts", import.meta.url)), "utf8");
   assert.match(handler, /wrapAdapterWithOfficialFetchCache/);
   assert.match(handler, /vietlottOfficialAdapter/);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DATA_REFRESH_TTL_MS, REFRESH_API_URL, pickBestSnapshot, refreshDataset, shouldAutoRefresh, type LoadedDataset } from "./refresh";
-import { ALLOWED_HOSTS, assertAllowedUrl, HttpError } from "./http";
+import { DATA_REFRESH_TTL_MS, REFRESH_API_URL, chooseLoadedDataset, pickBestSnapshot, refreshDataset, shouldAutoRefresh, type LoadedDataset } from "./refresh";
+import { ALLOWED_HOSTS, assertAllowedUrl, HttpError, MAX_REDIRECTS } from "./http";
 import { VIETLOTT_DATA_URL } from "./sources/vietlott-data";
 import type { DatasetManifest, DrawRecord } from "./types";
 
@@ -87,6 +87,30 @@ test("cùng ngày mới nhất thì lấy bộ nhiều bản ghi hơn", () => {
     manifest: null,
   };
   assert.equal(pickBestSnapshot(bundled, cached).records.length, 3);
+});
+
+test("chooseLoadedDataset: bundled fail vẫn dùng cache hợp lệ (offline-first)", () => {
+  const cached = { records: [draw("00200", "2017-10-29")], manifest: null };
+  const picked = chooseLoadedDataset(null, cached, new Error("bundled offline"));
+  assert.equal(picked.origin, "cache");
+  assert.equal(picked.records.length, 1);
+});
+
+test("chooseLoadedDataset: cả hai nguồn hỏng thì throw lỗi bundled", () => {
+  assert.throws(
+    () => chooseLoadedDataset(null, null, new Error("bundled offline")),
+    /bundled offline/,
+  );
+});
+
+test("assertAllowedUrl chặn credential và port lạ", () => {
+  assert.throws(() => assertAllowedUrl("https://user:pass@vietlott.vn/x"), HttpError);
+  assert.throws(() => assertAllowedUrl("https://vietlott.vn:8443/x"), HttpError);
+});
+
+test("MAX_REDIRECTS hữu hạn và http module export redirect policy", () => {
+  assert.equal(MAX_REDIRECTS, 5);
+  assert.ok(MAX_REDIRECTS >= 1);
 });
 
 test("allowlist chặn host lạ (chống SSRF)", () => {

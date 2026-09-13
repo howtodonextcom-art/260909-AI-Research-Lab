@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  runFutureLeakageControl,
   runIidSyntheticControl,
   runLabelPermutationControl,
   runRandomBaselineControl,
@@ -118,4 +119,39 @@ test("Control E: dữ liệu ngắn hơn lookback trả về trials=0 một các
     assert.equal(result.trueEdgeByStrategy[id], 0);
     assert.equal(result.permutedEdgeByStrategy[id], 0);
   }
+});
+
+test("Control F (future leakage): vé rò rỉ đọc thẳng kết quả tương lai luôn trúng cả 6 số", () => {
+  const draws = syntheticDraws(300, 13);
+  const result = runFutureLeakageControl(draws, 90);
+  assert.ok(result.trials > 0);
+  // The leaked ticket IS the target draw's result, so every trial matches all 6.
+  assert.equal(result.leakedAverageMatches, 6);
+  assert.equal(result.leakedJackpotRate, 1);
+  assert.equal(result.leakDetected, true);
+});
+
+test("Control F: edge của vé rò rỉ lớn hơn hẳn edge của chiến lược an toàn (không rò rỉ) trên cùng dữ liệu", () => {
+  const draws = syntheticDraws(300, 21);
+  const result = runFutureLeakageControl(draws, 90);
+  // Leak-safe HOT on an IID-fair synthetic series has no real signal, so its
+  // edge stays small; the leaked edge is a full 6 - 0.8 = 5.2 above null.
+  assert.ok(Math.abs(result.leakSafeEdge) < 1, `leak-safe edge ${result.leakSafeEdge} bất thường cao`);
+  assert.ok(result.leakedEdge > result.leakSafeEdge + 1);
+  assert.ok(Math.abs(result.leakedEdge - (6 - 0.8)) < 1e-9);
+});
+
+test("Control F: dữ liệu ngắn hơn lookback trả về trials=0 một cách an toàn, leakDetected=false", () => {
+  const draws = syntheticDraws(50, 3);
+  const result = runFutureLeakageControl(draws, 90);
+  assert.equal(result.trials, 0);
+  assert.equal(result.leakDetected, false);
+  assert.equal(result.leakedAverageMatches, 0);
+});
+
+test("Control F tái lập được (không phụ thuộc seed ngẫu nhiên vì vé rò rỉ = kết quả thật)", () => {
+  const draws = syntheticDraws(220, 55);
+  const a = runFutureLeakageControl(draws, 60);
+  const b = runFutureLeakageControl(draws, 60);
+  assert.deepEqual(a, b);
 });

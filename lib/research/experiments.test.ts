@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { hacBandwidth, runTemporalBacktestReport, type DrawRecord } from "../analytics";
+import { MEGA_645 } from "../mega645";
 import { createRng, drawFairTicket } from "./rng";
 import {
   FALLBACK_HOLM_FAMILY_SIZE,
@@ -133,7 +136,16 @@ test("buildExperimentArtifactsFromReport ghim varianceMethod/hacLag/familySize/l
 test("registry parse + idempotent lookup theo experimentId", () => {
   const line = JSON.stringify({
     experimentId: "exp-1",
+    hypothesisId: "HOT-vs-random",
     familyId: "family-1",
+    strategyId: "HOT",
+    strategyVersion: "v1",
+    parameters: { lookback: 90 },
+    seed: 645,
+    datasetHash: "abc",
+    protocolVersion: "v1",
+    protocolHash: "def",
+    registeredAt: "2026-09-12T00:00:00.000Z",
     status: "COMPLETED",
   });
   const records = parseExperimentRegistry(`${line}\n${line}\n`);
@@ -165,6 +177,30 @@ test("parseExperimentRegistry: dòng kiểu cũ không có trường pre-registr
   assert.equal(records[0].preRegistered, undefined);
 });
 
+test("parseExperimentRegistry: object rỗng hoặc thiếu field bắt buộc bị từ chối", () => {
+  assert.throws(() => parseExperimentRegistry("{}"), /experimentId/);
+  assert.throws(
+    () =>
+      parseExperimentRegistry(
+        JSON.stringify({
+          experimentId: "x",
+          hypothesisId: "h",
+          familyId: "f",
+          strategyId: "HOT",
+          strategyVersion: "v1",
+          parameters: {},
+          seed: 1,
+          datasetHash: "d",
+          protocolVersion: "v1",
+          protocolHash: "p",
+          registeredAt: "not-a-date",
+          status: "COMPLETED",
+        }),
+      ),
+    /registeredAt/,
+  );
+});
+
 test("parseExperimentRegistry: dòng kiểu mới với trường pre-registration hợp lệ parse và round-trip đúng", () => {
   const record = {
     experimentId: "exp-new",
@@ -194,20 +230,25 @@ test("parseExperimentRegistry: dòng kiểu mới với trường pre-registrati
 });
 
 test("parseExperimentRegistry: trường pre-registration sai kiểu bị từ chối rõ ràng, không âm thầm chấp nhận hay rơi rớt", () => {
-  const badBudget = JSON.stringify({ experimentId: "exp-bad", familyId: "family-1", budgetTickets: "not a number" });
-  assert.throws(() => parseExperimentRegistry(badBudget), /budgetTickets/);
-
-  const badKind = JSON.stringify({ experimentId: "exp-bad-2", familyId: "family-1", predictionKind: "quantum" });
-  assert.throws(() => parseExperimentRegistry(badKind), /predictionKind/);
-
-  const badPredictions = JSON.stringify({ experimentId: "exp-bad-3", familyId: "family-1", predictions: [1, 2, 3] });
-  assert.throws(() => parseExperimentRegistry(badPredictions), /predictions/);
-
-  const badPreRegistered = JSON.stringify({ experimentId: "exp-bad-4", familyId: "family-1", preRegistered: "yes" });
-  assert.throws(() => parseExperimentRegistry(badPreRegistered), /preRegistered/);
-
-  const badRankingVersion = JSON.stringify({ experimentId: "exp-bad-5", familyId: "family-1", rankingScoreVersion: 123 });
-  assert.throws(() => parseExperimentRegistry(badRankingVersion), /rankingScoreVersion/);
+  const base = {
+    experimentId: "exp-bad",
+    hypothesisId: "HOT-vs-random",
+    familyId: "family-1",
+    strategyId: "HOT",
+    strategyVersion: "v1",
+    parameters: {},
+    seed: 1,
+    datasetHash: "d",
+    protocolVersion: "v1",
+    protocolHash: "p",
+    registeredAt: "2026-09-12T00:00:00.000Z",
+    status: "COMPLETED",
+  };
+  assert.throws(() => parseExperimentRegistry(JSON.stringify({ ...base, budgetTickets: "not a number" })), /budgetTickets/);
+  assert.throws(() => parseExperimentRegistry(JSON.stringify({ ...base, predictionKind: "quantum" })), /predictionKind/);
+  assert.throws(() => parseExperimentRegistry(JSON.stringify({ ...base, predictions: [1, 2, 3] })), /predictions/);
+  assert.throws(() => parseExperimentRegistry(JSON.stringify({ ...base, preRegistered: "yes" })), /preRegistered/);
+  assert.throws(() => parseExperimentRegistry(JSON.stringify({ ...base, rankingScoreVersion: 123 })), /rankingScoreVersion/);
 });
 
 test("resolveHolmFamilySize đếm giả thuyết, không đếm experimentId", () => {
@@ -314,4 +355,97 @@ test("artifact gắn classifyEvidence từ protocol lock", () => {
   assert.equal(artifacts[0]?.controls.latestDrawEvidence, classifyEvidence("01561", lock));
   assert.equal(artifacts[0]?.controls.latestDrawEvidence, "RETROSPECTIVE");
   assert.equal(artifacts[0]?.controls.primaryEndpoint, "mean_matched_numbers_per_ticket");
+});
+
+// --- Pre-registration fields wired into scripts/run-experiment.ts's writes (§B4) ---
+
+test("registerExperiment: một bản ghi mới đăng ký (giống scripts/run-experiment.ts) có đủ 8 trường pre-registration với giá trị hợp lý", () => {
+  const now = () => new Date("2026-09-13T00:00:00Z");
+  const record = registerExperiment(
+    {
+      experimentId: "protocol-x-hot-abcdef01",
+      hypothesisId: "HOT-vs-random",
+      familyId: "protocol-x-primary-strategies",
+      strategyId: "HOT",
+      strategyVersion: "2026-09-10.1",
+      parameters: { lookback: 90 },
+      seed: 645,
+      datasetHash: "abcdef0123456789",
+      protocolVersion: "2026-09-10.1",
+      protocolHash: "protocolhash",
+      budgetTickets: 1,
+      budgetVnd: MEGA_645.ticketPrice,
+      predictionKind: "single_ticket",
+      predictions: ["06", "16", "22", "31", "36", "44"],
+      preRegistered: false,
+      dataCutoffDrawId: "01561",
+      dataCutoffDate: "2026-09-11",
+      rankingScoreVersion: null,
+    },
+    now,
+  );
+
+  assert.equal(record.budgetTickets, 1);
+  assert.equal(record.budgetVnd, 10_000);
+  assert.equal(record.predictionKind, "single_ticket");
+  assert.deepEqual(record.predictions, ["06", "16", "22", "31", "36", "44"]);
+  // Honest, not an oversight: registered against already-known data, so this
+  // is a retrospective registration, never a pre-registered bet.
+  assert.equal(record.preRegistered, false);
+  assert.equal(record.dataCutoffDrawId, "01561");
+  assert.equal(record.dataCutoffDate, "2026-09-11");
+  assert.equal(record.rankingScoreVersion, null);
+
+  // Must also round-trip through the same fail-closed parser the registry file uses.
+  const line = JSON.stringify(record);
+  const parsed = parseExperimentRegistry(line);
+  assert.equal(parsed.length, 1);
+  assert.deepEqual(parsed[0], record);
+});
+
+test("registerExperiment: predictions bị bỏ trống (không set) vẫn là một registration hợp lệ — không bịa giá trị khi không có dữ liệu", () => {
+  const now = () => new Date("2026-09-13T00:00:00Z");
+  const record = registerExperiment(
+    {
+      experimentId: "protocol-x-cold-abcdef01",
+      hypothesisId: "COLD-vs-random",
+      familyId: "protocol-x-primary-strategies",
+      strategyId: "COLD",
+      strategyVersion: "2026-09-10.1",
+      parameters: { lookback: 90 },
+      seed: 645,
+      datasetHash: "abcdef0123456789",
+      protocolVersion: "2026-09-10.1",
+      protocolHash: "protocolhash",
+      budgetTickets: 1,
+      budgetVnd: MEGA_645.ticketPrice,
+      predictionKind: "single_ticket",
+      preRegistered: false,
+      rankingScoreVersion: null,
+    },
+    now,
+  );
+  assert.equal(record.predictions, undefined);
+  assert.equal(record.dataCutoffDrawId, undefined);
+  const parsed = parseExperimentRegistry(JSON.stringify(record));
+  assert.equal(parsed.length, 1);
+});
+
+test("registry.jsonl thật (3 dòng đã commit) vẫn parse nguyên vẹn, không bị các trường mới ép buộc", async () => {
+  const registryPath = fileURLToPath(new URL("../../reports/experiments/registry.jsonl", import.meta.url));
+  const text = await readFile(registryPath, "utf8");
+  const records = parseExperimentRegistry(text);
+  assert.equal(records.length, 3);
+  for (const record of records) {
+    // These 3 lines predate the pre-registration fields — must still be undefined, not backfilled or coerced.
+    assert.equal(record.budgetTickets, undefined);
+    assert.equal(record.budgetVnd, undefined);
+    assert.equal(record.predictionKind, undefined);
+    assert.equal(record.predictions, undefined);
+    assert.equal(record.preRegistered, undefined);
+    assert.equal(record.dataCutoffDrawId, undefined);
+    assert.equal(record.dataCutoffDate, undefined);
+    assert.equal(record.rankingScoreVersion, undefined);
+    assert.equal(record.status, "COMPLETED");
+  }
 });

@@ -2,6 +2,7 @@
   "name": "site-creator-vinext-starter",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -13,21 +14,24 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && npm run test:business && npm run data:test",
-    "test:business": "node --import=tsx --test lib/mega645.test.ts lib/analytics.test.ts lib/analytics.replay-freeze.test.ts lib/profit.test.ts lib/portfolio.test.ts lib/research/statistics.test.ts lib/research/negative-controls.test.ts lib/research/protocol.test.ts lib/research/experiments.test.ts lib/research/prospective.test.ts lib/research/alpha-spending.test.ts lib/research/portfolio-mc.test.ts lib/research/bao.test.ts lib/research/ranking-score.test.ts app/page.a11y.test.ts app/layout.fonts.test.ts components/data-status.contract.test.ts package.deploy.test.ts",
-    "data:test": "node --import=tsx --test lib/data/schema.test.ts lib/data/jsonl.test.ts lib/data/merge.test.ts lib/data/sync.test.ts lib/data/refresh.test.ts lib/data/official-fetch-cache.test.ts lib/data/continuity.test.ts lib/data/cross-check.test.ts lib/data/sources/vietlott-official.test.ts lib/data/live-verification.test.ts lib/data/draw-data-state.test.ts lib/data/browser-cache.test.ts lib/data/report.test.ts",
+    "test:business": "node --import=tsx --test lib/mega645.test.ts lib/analytics.test.ts lib/analytics.replay-freeze.test.ts lib/profit.test.ts lib/portfolio.test.ts lib/research/statistics.test.ts lib/research/negative-controls.test.ts lib/research/controls-summary.test.ts lib/research/protocol.test.ts lib/research/experiments.test.ts lib/research/prospective.test.ts lib/research/alpha-spending.test.ts lib/research/portfolio-mc.test.ts lib/research/bao.test.ts lib/research/ranking-score.test.ts lib/research/features.test.ts lib/research/ablation.test.ts app/page.a11y.test.ts app/layout.fonts.test.ts app/ui-ranking-score-ban.contract.test.ts components/data-status.contract.test.ts package.deploy.test.ts",
+    "data:test": "node --import=tsx --test lib/data/schema.test.ts lib/data/jsonl.test.ts lib/data/merge.test.ts lib/data/sync.test.ts lib/data/refresh.test.ts lib/data/official-fetch-cache.test.ts lib/data/rate-limit.test.ts lib/data/continuity.test.ts lib/data/cross-check.test.ts lib/data/sources/vietlott-official.test.ts lib/data/live-verification.test.ts lib/data/draw-data-state.test.ts lib/data/browser-cache.test.ts lib/data/report.test.ts app/api/data/refresh/route.test.ts",
     "data:sync": "node --import=tsx scripts/data-sync.ts",
     "data:check": "node --import=tsx scripts/data-check.ts",
     "data:status": "node --import=tsx scripts/data-status.ts",
     "data:status:json": "node --import=tsx scripts/data-status.ts --json",
     "data:verify-live": "node --import=tsx scripts/data-verify-live.ts",
     "data:cross-check": "node --import=tsx scripts/data-cross-check.ts",
+    "data:schedule": "node --import=tsx scripts/data-schedule.ts",
     "research:experiment": "node --import=tsx scripts/run-experiment.ts",
     "research:lock": "node --import=tsx scripts/research-lock.ts",
     "research:controls": "node --import=tsx scripts/research-controls.ts",
     "research:prospective-freeze": "node --import=tsx scripts/research-prospective.ts freeze",
     "research:prospective-append": "node --import=tsx scripts/research-prospective.ts append-result",
     "research:portfolio-mc": "node --import=tsx scripts/portfolio-mc.ts",
-    "research:bao-frontier": "node --import=tsx scripts/bao-frontier.ts"
+    "research:bao-frontier": "node --import=tsx scripts/bao-frontier.ts",
+    "research:ablation": "node --import=tsx scripts/research-ablation.ts",
+    "research:prospective-summary": "node --import=tsx scripts/export-prospective-summary.ts"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",

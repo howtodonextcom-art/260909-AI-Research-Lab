@@ -92,30 +92,39 @@ export function wrapAdapterWithOfficialFetchCache(
 ): DrawSourceAdapter {
   const ttlMs = options.ttlMs ?? OFFICIAL_FETCH_CACHE_TTL_MS;
   const force = Boolean(options.force);
+  /** In-process single-flight: concurrent misses share one upstream call. Not cross-isolate. */
+  const inflight = new Map<string, Promise<SourceResponse>>();
+
+  async function cachedFetch(key: string, run: () => Promise<SourceResponse>): Promise<SourceResponse> {
+    if (!force) {
+      const cached = await options.store.get(key);
+      if (cached) return JSON.parse(cached) as SourceResponse;
+      const pending = inflight.get(key);
+      if (pending) return pending;
+    }
+
+    const task = (async () => {
+      const response = await run();
+      await options.store.set(key, JSON.stringify(response), ttlMs);
+      return response;
+    })().finally(() => {
+      inflight.delete(key);
+    });
+
+    if (!force) inflight.set(key, task);
+    return task;
+  }
+
   return {
     id: adapter.id,
     sourceUrl: adapter.sourceUrl,
     license: adapter.license,
     normalize: (raw) => adapter.normalize(raw),
     async fetchAll(fetchOptions?: FetchOptions) {
-      const key = officialFetchCacheKey("all");
-      if (!force) {
-        const cached = await options.store.get(key);
-        if (cached) return JSON.parse(cached) as SourceResponse;
-      }
-      const response = await adapter.fetchAll(fetchOptions);
-      await options.store.set(key, JSON.stringify(response), ttlMs);
-      return response;
+      return cachedFetch(officialFetchCacheKey("all"), () => adapter.fetchAll(fetchOptions));
     },
     async fetchSince(cursor: SyncCursor, fetchOptions?: FetchOptions) {
-      const key = officialFetchCacheKey("since", cursor);
-      if (!force) {
-        const cached = await options.store.get(key);
-        if (cached) return JSON.parse(cached) as SourceResponse;
-      }
-      const response = await adapter.fetchSince(cursor, fetchOptions);
-      await options.store.set(key, JSON.stringify(response), ttlMs);
-      return response;
+      return cachedFetch(officialFetchCacheKey("since", cursor), () => adapter.fetchSince(cursor, fetchOptions));
     },
   };
 }

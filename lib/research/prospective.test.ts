@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { evaluateTicket, type PrizeTier } from "../mega645";
+import type { StrategyId } from "../analytics";
 import {
   appendProspectiveResult,
   freezeProspectivePrediction,
@@ -25,6 +27,26 @@ const baseInput = {
   lock: LOCK,
   now: () => new Date("2026-09-13T00:00:00.000Z"),
 };
+
+test("freezeProspectivePrediction từ chối protocolHash lệch lock", () => {
+  const result = freezeProspectivePrediction({
+    ...baseInput,
+    drawId: "01562",
+    protocolHash: "changed-protocol",
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /protocolHash/);
+});
+
+test("freezeProspectivePrediction từ chối khi knownDrawIds đã chứa kỳ mục tiêu", () => {
+  const result = freezeProspectivePrediction({
+    ...baseInput,
+    drawId: "01562",
+    knownDrawIds: ["01562"],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /dataset đã biết/);
+});
 
 test("freezeProspectivePrediction từ chối kỳ cũ hơn mốc khóa (RETROSPECTIVE rõ ràng)", () => {
   const result = freezeProspectivePrediction({ ...baseInput, drawId: "01560" });
@@ -168,6 +190,103 @@ test("parseProspectiveScorecard: từ chối strategyId không hợp lệ", () =
   const result = parseProspectiveScorecard(JSON.stringify(bad));
   assert.equal(result.entries.length, 0);
   assert.match(result.issues[0].reason, /strategyId/);
+});
+
+// --- End-to-end mocked-#01562 scenario (§B3 P1: "End-to-end prospective
+// append when fixture draw #01562 mocked"). This fixture is TEST-ONLY: the
+// result below is a synthetic/fake draw, never written to the real
+// `reports/prospective-scorecard.jsonl` or the real dataset. ---
+
+test("Kịch bản đầy đủ #01562 (mocked): đóng băng 4 dự đoán, append kết quả giả lập, tính đúng matches/tier qua evaluateTicket, KHÔNG đụng tới kỳ khác, và idempotent khi gọi lại", () => {
+  const lock: ProtocolLock = {
+    protocolVersion: "test-e2e-1",
+    protocolHash: "hash-e2e",
+    protocolLockedAt: "2026-09-12T00:00:00.000Z",
+    protocolDatasetHash: "dataset-e2e",
+    prospectiveStartDrawId: "01562",
+  };
+  const freezeAt = () => new Date("2026-09-13T00:00:00.000Z");
+
+  const predictionsByStrategy: Record<StrategyId, number[]> = {
+    RANDOM: [1, 2, 3, 4, 5, 6],
+    HOT: [3, 9, 18, 27, 33, 45],
+    COLD: [3, 9, 18, 20, 25, 30],
+    BALANCED: [3, 9, 40, 42, 43, 44],
+  };
+
+  // Freeze 1-4 predictions for the same mocked future draw #01562, one per strategy.
+  const frozenEntries: ProspectiveEntry[] = [];
+  for (const strategyId of Object.keys(predictionsByStrategy) as StrategyId[]) {
+    const result = freezeProspectivePrediction({
+      drawId: "01562",
+      strategyId,
+      prediction: predictionsByStrategy[strategyId],
+      protocolHash: lock.protocolHash,
+      datasetHashAtFreeze: lock.protocolDatasetHash,
+      lock,
+      now: freezeAt,
+    });
+    assert.equal(result.ok, true, `freeze thất bại cho ${strategyId}`);
+    if (result.ok) frozenEntries.push(result.entry);
+  }
+  assert.equal(frozenEntries.length, 4);
+
+  // A different, still-pending drawId (#01563) frozen alongside — must remain
+  // completely untouched by anything that resolves #01562.
+  const pendingOther = freezeProspectivePrediction({
+    drawId: "01563",
+    strategyId: "RANDOM",
+    prediction: [10, 11, 12, 13, 14, 15],
+    protocolHash: lock.protocolHash,
+    datasetHashAtFreeze: lock.protocolDatasetHash,
+    lock,
+    now: freezeAt,
+  });
+  assert.equal(pendingOther.ok, true);
+  if (!pendingOther.ok) return;
+
+  const scorecard: ProspectiveEntry[] = [...frozenEntries, pendingOther.entry];
+
+  // Synthetic/fake "real" draw #01562 — mock-only fixture, never a real Vietlott result.
+  const mockedRealResult = [3, 9, 18, 27, 33, 41];
+  const updated = appendProspectiveResult(scorecard, { drawId: "01562", result: mockedRealResult });
+
+  // Every #01562 entry now carries result/matches/tier that agree exactly
+  // with an independent evaluateTicket call — no double bookkeeping.
+  for (const strategyId of Object.keys(predictionsByStrategy) as StrategyId[]) {
+    const entry = updated.find((e) => e.drawId === "01562" && e.strategyId === strategyId);
+    assert.ok(entry, `thiếu entry cho ${strategyId}`);
+    const expected = evaluateTicket(predictionsByStrategy[strategyId], mockedRealResult);
+    assert.deepEqual(entry!.result, mockedRealResult);
+    assert.equal(entry!.matches, expected.matches);
+    assert.equal(entry!.tier, expected.tier as PrizeTier);
+  }
+
+  // HOT was crafted to hit 5/6 (FIRST), COLD 3/6 (THIRD), BALANCED 2/6 (NONE), RANDOM 1/6 (NONE) — sanity-check the fixture itself.
+  assert.equal(updated.find((e) => e.strategyId === "HOT")!.matches, 5);
+  assert.equal(updated.find((e) => e.strategyId === "HOT")!.tier, "FIRST");
+  assert.equal(updated.find((e) => e.strategyId === "COLD")!.matches, 3);
+  assert.equal(updated.find((e) => e.strategyId === "COLD")!.tier, "THIRD");
+  assert.equal(updated.find((e) => e.strategyId === "BALANCED")!.matches, 2);
+  assert.equal(updated.find((e) => e.strategyId === "BALANCED")!.tier, "NONE");
+  assert.equal(updated.find((e) => e.strategyId === "RANDOM" && e.drawId === "01562")!.matches, 1);
+
+  // The still-pending #01563 entry must be byte-for-byte untouched — not scored, not peeked at.
+  const untouchedOther = updated.find((e) => e.drawId === "01563");
+  assert.deepEqual(untouchedOther, pendingOther.entry);
+  assert.equal(untouchedOther!.result, null);
+  assert.equal(untouchedOther!.matches, null);
+  assert.equal(untouchedOther!.tier, null);
+
+  // Idempotency: re-appending the SAME draw id — even with a different
+  // (wrong) result — must not re-score or throw. Already-scored entries are
+  // append-only and never recomputed.
+  const reappended = appendProspectiveResult(updated, { drawId: "01562", result: [1, 2, 3, 4, 5, 6] });
+  assert.deepEqual(reappended, updated);
+
+  // Re-appending the identical original result again is likewise a safe no-op.
+  const reappendedSame = appendProspectiveResult(updated, { drawId: "01562", result: mockedRealResult });
+  assert.deepEqual(reappendedSame, updated);
 });
 
 test("parseProspectiveScorecard: từ chối khi result có nhưng matches/tier lại null (không nhất quán)", () => {

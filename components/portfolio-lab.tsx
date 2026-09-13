@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Copy, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { CostFrontierPanel } from "@/components/cost-frontier";
 import { calculatePortfolioOdds, copyTickets, countCoveredPairs, optimizePortfolio } from "@/lib/portfolio";
 import { formatBall, formatVnd } from "@/lib/mega645";
 
@@ -18,14 +19,16 @@ function oneIn(value: number) {
 export function PortfolioLab() {
   const [ticketCount, setTicketCount] = useState(10);
   const [seed, setSeed] = useState(645);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "ok" | "fail">("idle");
   const portfolio = useMemo(() => optimizePortfolio(ticketCount, seed), [ticketCount, seed]);
-  const odds = calculatePortfolioOdds(ticketCount);
+  const odds = calculatePortfolioOdds(portfolio);
 
   const handleCopyTickets = async () => {
     try {
       await copyTickets(portfolio, (text) => navigator.clipboard.writeText(text));
+      setCopyStatus("ok");
     } catch {
-      // Clipboard permissions can be denied in local previews; the portfolio remains usable on screen.
+      setCopyStatus("fail");
     }
   };
 
@@ -58,6 +61,11 @@ export function PortfolioLab() {
 
     <section className="analysis-card">
       <div className="section-heading"><div><p className="eyebrow">Bộ vé đã tối ưu</p><h2>{ticketCount} vé không chồng vùng giải lớn</h2></div><Button variant="outline" onClick={handleCopyTickets}><Copy /> Sao chép</Button></div>
+      <p className="sr-only" aria-live="polite">
+        {copyStatus === "ok" ? "Đã sao chép danh sách vé." : copyStatus === "fail" ? "Không sao chép được. Hãy chọn và copy thủ công." : ""}
+      </p>
+      {copyStatus === "ok" ? <p className="suggestion-warning" role="status">Đã sao chép danh sách vé vào clipboard.</p> : null}
+      {copyStatus === "fail" ? <p className="suggestion-warning" role="alert">Clipboard bị từ chối — hãy chọn văn bản trên màn hình và copy thủ công.</p> : null}
       <div className="portfolio-tickets">{portfolio.map((ticket, index) => <div className="portfolio-ticket" key={index}><span>Vé {String(index + 1).padStart(2, "0")}</span><div>{ticket.map(number => <b key={number}>{formatBall(number)}</b>)}</div></div>)}</div>
     </section>
 
@@ -66,5 +74,7 @@ export function PortfolioLab() {
       <p>Với một vé, xác suất giữ nguyên. Với nhiều vé, thiết kế tổ hợp loại bỏ việc hai vé chia sẻ cùng một cặp số; các vùng kết quả trùng ≥4 số không giao nhau và đạt độ phủ tuyến tính tối đa trong giới hạn 30 vé.</p>
       <p>Nó tốt hơn mua lặp một bộ số hoặc các vé quá giống nhau. So với nhiều vé ngẫu nhiên vốn đã ít chồng lấn, mức cải thiện có thể nhỏ. Chi phí tăng đúng theo số vé và kỳ vọng tài chính của mỗi vé không đổi.</p>
     </section>
+
+    <CostFrontierPanel />
   </section>;
 }

@@ -29,6 +29,19 @@ test("xác suất portfolio tăng tuyến tính nhưng không đổi xác suất
   assert.equal(ten.exactProbabilityJackpot, 10 / 8_145_060);
 });
 
+test("calculatePortfolioOdds từ chối portfolio vi phạm pairwise ≤ 1", () => {
+  assert.throws(
+    () =>
+      calculatePortfolioOdds([
+        [1, 2, 3, 4, 5, 6],
+        [1, 2, 7, 8, 9, 10],
+      ]),
+    /portfolio hợp lệ/,
+  );
+  const valid = optimizePortfolio(5, 645);
+  assert.equal(calculatePortfolioOdds(valid).tickets, 5);
+});
+
 test("từ chối số vé ngoài giới hạn", () => {
   for (const count of [0, 31, -1, 1.5]) assert.throws(() => optimizePortfolio(count));
 });

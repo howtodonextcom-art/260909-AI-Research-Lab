@@ -1,14 +1,13 @@
 /**
  * Client-side dataset loading and refresh.
  *
- * Reuses `runSync` with browser-backed storage, so the client and the CLI
- * share one implementation of normalization, merging, conflict handling and
- * dataset validation. A rule enforced in one place cannot drift between the
- * two surfaces.
+ * Load path: try bundled snapshot and IndexedDB independently, then pick the
+ * better coverage. A failed bundled fetch must not block a valid device cache
+ * (offline-first for the dataset).
  *
- * The source is fetched directly: it serves `Access-Control-Allow-Origin: *`,
- * so no server proxy is involved and there is no server-side request for a
- * caller to steer.
+ * Network updates go through `POST /api/data/refresh` (Worker), which runs the
+ * official Vietlott adapter server-side — the browser does not call upstream
+ * mirrors directly on the critical path.
  */
 import { parseDrawsJsonl } from "./jsonl";
 import { clearCache, readCache, writeCache, writeCachedManifest } from "./browser-cache";
@@ -81,18 +80,44 @@ async function fetchBundled(signal?: AbortSignal): Promise<LoadedDataset> {
 }
 
 /**
- * Loads the dataset the app should render right now: the bundled snapshot,
- * upgraded to the cached one when the cache is valid and covers more draws.
+ * Pure resolver used by `loadDataset` and unit tests: either source may be
+ * missing; only both-missing is fatal.
+ */
+export function chooseLoadedDataset(
+  bundled: LoadedDataset | null,
+  cached: { records: DrawRecord[]; manifest: DatasetManifest | null } | null,
+  bundledError?: unknown,
+): LoadedDataset {
+  if (bundled && cached) return pickBestSnapshot(bundled, cached);
+  if (bundled) return bundled;
+  if (cached && cached.records.length > 0) {
+    return { records: cached.records, manifest: cached.manifest, origin: "cache" };
+  }
+  if (bundledError instanceof Error) throw bundledError;
+  throw new Error("Không đọc được dữ liệu kèm theo và không có cache hợp lệ trên thiết bị.");
+}
+
+/**
+ * Loads the dataset the app should render right now. Bundled fetch and
+ * IndexedDB are independent: offline with a good cache still starts.
  */
 export async function loadDataset(signal?: AbortSignal): Promise<LoadedDataset> {
-  const bundled = await fetchBundled(signal);
-  let cached = null;
+  let cached: { records: DrawRecord[]; manifest: DatasetManifest | null } | null = null;
   try {
     cached = await readCache();
   } catch {
     cached = null;
   }
-  return pickBestSnapshot(bundled, cached);
+
+  let bundled: LoadedDataset | null = null;
+  let bundledError: unknown;
+  try {
+    bundled = await fetchBundled(signal);
+  } catch (error) {
+    bundledError = error;
+  }
+
+  return chooseLoadedDataset(bundled, cached, bundledError);
 }
 
 export async function resetDatasetCache(signal?: AbortSignal): Promise<LoadedDataset> {

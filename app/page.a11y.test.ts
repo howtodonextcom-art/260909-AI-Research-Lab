@@ -40,3 +40,11 @@ test("page lấy Holm familySize từ registry summary, không từ CURRENT_PROT
   assert.match(source, /bền đuôi/);
   assert.match(source, /n\^\(1\/3\)/);
 });
+
+test("tab mặc định là research; suggestion ghi cutoff kỳ tiếp theo", () => {
+  assert.match(source, /defaultValue="research"/);
+  assert.match(source, /Khảo sát kỳ tiếp theo/);
+  assert.match(source, /suggestionCutoffId/);
+  assert.match(source, /CURRENT_PROTOCOL\.lookback/);
+  assert.doesNotMatch(source, /draws\.slice\(-90\)/);
+});

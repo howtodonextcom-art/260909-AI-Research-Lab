@@ -52,15 +52,52 @@ export function transitionExperiment(record: ExperimentRecord, status: Experimen
   return { ...record, status };
 }
 
+const EXPERIMENT_STATUSES: ExperimentStatus[] = ["REGISTERED", "RUNNING", "COMPLETED", "FAILED", "INVALIDATED"];
+const STRATEGY_IDS: StrategyId[] = ["RANDOM", "HOT", "COLD", "BALANCED"];
+
 /**
- * Fields present on a line are validated for shape (fail-closed, mirroring
- * `lib/data/schema.ts:normalizeDraw`'s "explicit reason, never silent"
- * house style): `undefined` is always fine (old registry lines predate these
- * fields), but a present field with the wrong type/shape is never silently
- * accepted or silently dropped — parsing throws with the line number and an
- * explicit reason instead.
+ * Required core fields are always validated. Optional pre-registration fields
+ * follow fail-closed shape checks: `undefined` is fine (older lines), but a
+ * present field with the wrong type is never silently accepted.
  */
 function describeExperimentRecordProblem(record: Record<string, unknown>): string | null {
+  if (typeof record.experimentId !== "string" || record.experimentId.length === 0) {
+    return "thiếu experimentId hoặc experimentId rỗng";
+  }
+  if (typeof record.hypothesisId !== "string" || record.hypothesisId.length === 0) {
+    return "thiếu hypothesisId hoặc hypothesisId rỗng";
+  }
+  if (typeof record.familyId !== "string" || record.familyId.length === 0) {
+    return "thiếu familyId hoặc familyId rỗng";
+  }
+  if (!STRATEGY_IDS.includes(record.strategyId as StrategyId)) {
+    return `strategyId không hợp lệ: ${JSON.stringify(record.strategyId)}`;
+  }
+  if (typeof record.strategyVersion !== "string" || record.strategyVersion.length === 0) {
+    return "thiếu strategyVersion";
+  }
+  if (record.parameters === null || typeof record.parameters !== "object" || Array.isArray(record.parameters)) {
+    return "parameters phải là object";
+  }
+  if (typeof record.seed !== "number" || !Number.isFinite(record.seed)) {
+    return `seed phải là số hữu hạn, nhận: ${JSON.stringify(record.seed)}`;
+  }
+  if (typeof record.datasetHash !== "string" || record.datasetHash.length === 0) {
+    return "thiếu datasetHash";
+  }
+  if (typeof record.protocolVersion !== "string" || record.protocolVersion.length === 0) {
+    return "thiếu protocolVersion";
+  }
+  if (typeof record.protocolHash !== "string" || record.protocolHash.length === 0) {
+    return "thiếu protocolHash";
+  }
+  if (typeof record.registeredAt !== "string" || Number.isNaN(Date.parse(record.registeredAt))) {
+    return `registeredAt không phải ISO timestamp hợp lệ: ${JSON.stringify(record.registeredAt)}`;
+  }
+  if (!EXPERIMENT_STATUSES.includes(record.status as ExperimentStatus)) {
+    return `status không hợp lệ: ${JSON.stringify(record.status)}`;
+  }
+
   if (record.budgetTickets !== undefined && (typeof record.budgetTickets !== "number" || !Number.isFinite(record.budgetTickets))) {
     return `budgetTickets phải là số hữu hạn, nhận: ${JSON.stringify(record.budgetTickets)}`;
   }

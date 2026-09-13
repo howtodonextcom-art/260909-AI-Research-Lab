@@ -50,22 +50,47 @@ export type FreezeProspectiveInput = {
   drawId: string;
   strategyId: StrategyId;
   prediction: number[];
+  /** Must equal `lock.protocolHash` — caller-supplied drift is rejected. */
   protocolHash: string;
   datasetHashAtFreeze: string;
   lock: ProtocolLock;
+  /**
+   * Optional defense-in-depth: refuse when the target draw already exists in
+   * the caller's known dataset (peeking), even if id classification says
+   * PROSPECTIVE under a stale lock.
+   */
+  knownDrawIds?: ReadonlySet<string> | readonly string[];
   now?: () => Date;
 };
 
 export type FreezeProspectiveResult = { ok: true; entry: ProspectiveEntry } | { ok: false; reason: string };
 
+function knownDrawIdSet(known: FreezeProspectiveInput["knownDrawIds"]): ReadonlySet<string> | null {
+  if (!known) return null;
+  return known instanceof Set ? known : new Set(known);
+}
+
 /**
  * Freezes one prediction for one draw/strategy. Refuses — returns
- * `{ ok: false, reason }`, never silently accepts — unless `classifyEvidence`
- * says the target draw id is genuinely PROSPECTIVE under `lock`. This is the
- * only gate in the module; callers must not bypass it by constructing a
- * `ProspectiveEntry` literal directly.
+ * `{ ok: false, reason }`, never silently accepts — unless:
+ * 1. `protocolHash` matches the locked protocol hash,
+ * 2. `classifyEvidence` says PROSPECTIVE under `lock`,
+ * 3. optional `knownDrawIds` does not already contain the draw,
+ * 4. the ticket is a valid Mega 6/45 set.
+ *
+ * Callers must not bypass this by constructing a `ProspectiveEntry` literal.
  */
 export function freezeProspectivePrediction(input: FreezeProspectiveInput): FreezeProspectiveResult {
+  if (input.protocolHash !== input.lock.protocolHash) {
+    return {
+      ok: false,
+      reason:
+        `Từ chối đóng băng kỳ ${input.drawId}: protocolHash caller (${input.protocolHash.slice(0, 12)}…) ` +
+        `không khớp protocolHash đã khóa (${input.lock.protocolHash.slice(0, 12)}…). ` +
+        "Không được gắn nhãn prospective sau khi đổi protocol.",
+    };
+  }
+
   const evidence = classifyEvidence(input.drawId, input.lock);
   if (evidence !== "PROSPECTIVE") {
     return {
@@ -76,6 +101,17 @@ export function freezeProspectivePrediction(input: FreezeProspectiveInput): Free
         "Không thể đăng ký một 'dự đoán' cho kỳ đã xảy ra hoặc đã biết trước khi khóa protocol.",
     };
   }
+
+  const known = knownDrawIdSet(input.knownDrawIds);
+  if (known?.has(input.drawId)) {
+    return {
+      ok: false,
+      reason:
+        `Từ chối đóng băng kỳ ${input.drawId}: kỳ này đã có trong dataset đã biết — ` +
+        "không thể đăng ký dự đoán sau khi kết quả đã có sẵn (kể cả khi lock bị cũ).",
+    };
+  }
+
   if (!validateNumbers(input.prediction)) {
     return {
       ok: false,

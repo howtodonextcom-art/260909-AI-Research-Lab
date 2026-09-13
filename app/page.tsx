@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { ProfitLab } from "@/components/profit-lab";
 import { PortfolioLab } from "@/components/portfolio-lab";
 import { DataStatus } from "@/components/data-status";
+import { DataExplorer } from "@/components/data-explorer";
+import { ExperimentScorecard } from "@/components/experiment-scorecard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -121,7 +123,14 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
   // leak the holdout exists to prevent.
   const candidate = temporalReport.candidate;
   const selected = backtests.find((item) => item.strategy === strategy);
-  const suggestion = useMemo(() => createStrategyPick(draws.slice(-90), strategy, draws.length + 645), [draws, strategy]);
+  // Next-draw survey illustration: latest published lookback only. Not a
+  // historical prediction score — do not use this set to claim past edge.
+  const suggestion = useMemo(
+    () => createStrategyPick(draws.slice(-CURRENT_PROTOCOL.lookback), strategy, draws.length + 645),
+    [draws, strategy],
+  );
+  const suggestionCutoffId = latest?.id ?? "—";
+  const suggestionCutoffDate = latest ? formatDateVi(latest.date) : "—";
   const hot = frequencies.slice().sort((a, b) => b.count - a.count || a.number - b.number).slice(0, 6);
   const cold = frequencies.slice().sort((a, b) => a.count - b.count || a.number - b.number).slice(0, 6);
   const overdue = frequencies.slice().sort((a, b) => b.gap - a.gap || a.number - b.number).slice(0, 6);
@@ -227,6 +236,10 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           <p className="method-note"><Info /><span>{selectedReliability ? STRATEGIES[selectedReliability.strategy].name + " được chọn bằng validation rồi kiểm tra trên test chưa dùng để chọn." : "Không chiến lược nào đạt ngưỡng trên validation để được chọn."} P-value dùng kiểm định một phía so với random, SE Newey–West HAC (cửa sổ chồng, băng thông min(lookback-1, max(1, floor(n^(1/3))))), và hiệu chỉnh Holm-Bonferroni theo số giả thuyết / registry = {temporalReport.familySize} (family {familySummary?.familyId ?? "—"}; fallback {FALLBACK_HOLM_FAMILY_SIZE} nếu registry trống — familySize không tăng khi chỉ thêm kỳ/look mới). lookCount={temporalReport.lookCount}; alpha look hiện tại sau chi tiêu Pocock = {temporalReport.alpha} (nominal {temporalReport.nominalAlpha}). Đây là <strong>chia hồi cứu trên dữ liệu đã có sẵn</strong>: tập test là holdout theo nghĩa cơ học (không dùng để chọn), nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ các kỳ từ <code>{protocolLock?.prospectiveStartDrawId ?? "—"}</code> (protocol <code>{temporalReport.protocolVersion}</code>) mới là bằng chứng prospective.</span></p>
         </section>
 
+        <ExperimentScorecard protocolLock={protocolLock} familySummary={familySummary} draws={draws} />
+
+        <DataExplorer draws={draws} />
+
         <ProfitLab />
       </section>
 
@@ -254,7 +267,11 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
             <div className={selected?.gates.outperformsRandomPayout ? "gate-pass" : ""}><Check /> Trả thưởng bền đuôi hơn random <span>{selected && random ? formatVnd(selected.robustPayout - random.robustPayout) : "—"}</span></div>
           </div>
           <div className="suggestion-balls">{suggestion.map((number) => <Ball key={number} number={number} />)}</div>
-          <p className="suggestion-warning">Bộ số nghiên cứu, không phải khuyến nghị mua và không phải cam kết thắng. Mỗi vé vẫn có xác suất Jackpot như nhau: 1/8.145.060.</p>
+          <p className="suggestion-warning">
+            <strong>Khảo sát kỳ tiếp theo</strong> (minh họa) — cutoff dữ liệu #{suggestionCutoffId} / {suggestionCutoffDate};
+            cửa sổ {CURRENT_PROTOCOL.lookback} kỳ đã công bố; loại bằng chứng: <em>không phải prospective scored</em>.
+            Không dùng bộ số này để tính thành tích dự đoán quá khứ. Mỗi vé vẫn có xác suất Jackpot như nhau: 1/8.145.060.
+          </p>
         </section>
       </aside>
     </div>
@@ -295,12 +312,12 @@ export default function Home() {
     <a className="skip-link" href="#workspace">Bỏ qua đến nội dung</a>
     <header className="topbar"><div className="brand-mark" aria-hidden="true">6<span>/</span>45</div><div><p className="brand-name">Mega 6/45 Research Lab</p><p className="brand-note">Phân tích độc lập · Không phải website Vietlott</p></div><Badge className="ml-auto hidden border-white/15 bg-white/8 text-slate-200 sm:inline-flex">MVP 02</Badge></header>
     <div id="workspace" className="workspace-shell research-shell">
-      <Tabs defaultValue="portfolio">
+      <Tabs defaultValue="research">
         <nav aria-label="Chế độ làm việc">
-          <TabsList className="mode-tabs"><TabsTrigger value="portfolio"><Grid3X3 /> Portfolio 4+</TabsTrigger><TabsTrigger value="research"><FlaskConical /> Nghiên cứu</TabsTrigger><TabsTrigger value="ticket"><Target /> Vé mô phỏng</TabsTrigger></TabsList>
+          <TabsList className="mode-tabs"><TabsTrigger value="research"><FlaskConical /> Nghiên cứu</TabsTrigger><TabsTrigger value="portfolio"><Grid3X3 /> Portfolio 4+</TabsTrigger><TabsTrigger value="ticket"><Target /> Vé mô phỏng</TabsTrigger></TabsList>
         </nav>
-        <TabsContent value="portfolio"><PortfolioLab /></TabsContent>
         <TabsContent value="research">{error ? <div className="load-state"><AlertTriangle /><h2>Không đọc được dữ liệu lịch sử</h2><p>{dataState.loadError}</p><Button className="primary-action" onClick={dataState.update} disabled={dataState.busy}><RefreshCw /> Thử cập nhật dữ liệu</Button></div> : draws.length ? <ResearchLab draws={draws} dataState={dataState} /> : <div className="load-state"><BarChart3 /><h2>Đang tải dữ liệu kỳ quay…</h2></div>}</TabsContent>
+        <TabsContent value="portfolio"><PortfolioLab /></TabsContent>
         <TabsContent value="ticket"><TicketLab /></TabsContent>
       </Tabs>
       <section className="facts-row"><article><CircleDollarSign /><div><span>Nguyên tắc vốn</span><strong>Không mua nếu kỳ vọng dương chưa được chứng minh</strong></div></article><article><ShieldCheck /><div><span>Chống overfit</span><strong>Chỉ dùng dữ liệu quá khứ tại mỗi kỳ test</strong></div></article><article><Info /><div><span>Nguồn dữ liệu</span><strong>{dataRangeLabel}</strong></div></article></section>

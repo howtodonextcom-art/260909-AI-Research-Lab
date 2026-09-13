@@ -1,10 +1,11 @@
 /**
- * `npm run research:controls` — run negative controls A/B/C/E and print the
+ * `npm run research:controls` — run negative controls A/B/C/E/F and print the
  * exact null contract (PRIMARY_ENDPOINT / EXPECTED_MATCHES).
  */
 import { fileURLToPath } from "node:url";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
 import {
+  runFutureLeakageControl,
   runIidSyntheticControl,
   runLabelPermutationControl,
   runRandomBaselineControl,
@@ -16,7 +17,7 @@ const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const paths = resolvePaths(projectRoot);
 const snapshot = await loadSnapshot(paths);
 
-console.log("\nNEGATIVE CONTROLS A/B/C/E");
+console.log("\nNEGATIVE CONTROLS A/B/C/E/F");
 console.log(`  Endpoint: ${PRIMARY_ENDPOINT.id}`);
 console.log(`  EXPECTED_MATCHES: ${EXPECTED_MATCHES}`);
 
@@ -61,5 +62,14 @@ for (const strategy of Object.keys(controlE.trueEdgeByStrategy) as Array<keyof t
 }
 console.log(`    edgeCollapsedTowardNull=${controlE.edgeCollapsedTowardNull} (mọi |edge hoán vị| < 0.15)`);
 console.log("    Nếu edge sau hoán vị vẫn lớn → nghi tín hiệu giả / bug pipeline.");
+
+const controlF = runFutureLeakageControl(snapshot.records, 90);
+console.log("\n  F — future leakage (vé rò rỉ đọc thẳng draws[index].result thay vì lịch sử)");
+console.log(`    trials=${controlF.trials}`);
+console.log(`    leakSafeEdge (HOT, dùng draws.slice(index-lookback,index)) = ${controlF.leakSafeEdge.toFixed(4)}`);
+console.log(`    leakedEdge   (đọc thẳng kết quả kỳ mục tiêu)              = ${controlF.leakedEdge.toFixed(4)}`);
+console.log(`    leakedAverageMatches=${controlF.leakedAverageMatches.toFixed(4)} leakedJackpotRate=${controlF.leakedJackpotRate.toFixed(4)}`);
+console.log(`    leakDetected=${controlF.leakDetected} (rò rỉ thật phải áp đảo, gần như trúng cả 6 số mọi kỳ)`);
+console.log("    Đây là control ngược của A/B/C/E: chứng minh bộ máy PHÁT HIỆN ĐƯỢC rò rỉ thật khi nó tồn tại.");
 
 console.log("\n  Xong.");

@@ -124,6 +124,7 @@ async function cmdFreeze(requestedDrawId: string): Promise<void> {
       protocolHash,
       datasetHashAtFreeze,
       lock,
+      knownDrawIds: snapshot.records.map((record) => record.id),
     });
     if (!result.ok) {
       console.error(`Từ chối đóng băng ${drawId}/${strategyId}: ${result.reason}`);

@@ -9,7 +9,7 @@
  * mutation) already has dedicated tests in `lib/analytics.test.ts`
  * ("validation không thay đổi khi sửa kỳ holdout tương lai" and "thay đổi
  * toàn bộ tập test không làm đổi ứng viên được chọn") and is not
- * duplicated here.
+ * duplicated here. Control F (future-only/leaked feature) is below, after E.
  */
 import { createStrategyPick, runWalkForwardBacktest, STRATEGIES, type BacktestResult, type DrawRecord, type StrategyId } from "../analytics";
 import { evaluateTicket } from "../mega645";
@@ -246,4 +246,85 @@ export function runLabelPermutationControl(
   );
 
   return { trials: trialCount, lookback, seed, trueEdgeByStrategy, permutedEdgeByStrategy, edgeCollapsedTowardNull };
+}
+
+export type FutureLeakageControlResult = {
+  trials: number;
+  lookback: number;
+  /** mean(matches) − EXPECTED_MATCHES for a genuine, leak-safe strategy (HOT) computed only from `draws.slice(index-lookback, index)`. */
+  leakSafeEdge: number;
+  /** mean(matches) − EXPECTED_MATCHES for the deliberately leaked strategy, which reads `draws[index].result` itself. */
+  leakedEdge: number;
+  leakedAverageMatches: number;
+  /** Fraction of trials where the leaked ticket matched all 6 numbers (it always will — the "ticket" IS the draw). */
+  leakedJackpotRate: number;
+  /** True when the leaked run looks unmistakably like a leak (near-jackpot every trial, edge far above any leak-safe strategy's). */
+  leakDetected: boolean;
+};
+
+/**
+ * Deliberately leaked "feature": ignores history entirely and copies the
+ * *target* draw's own result. This is the master prompt's "future-only/
+ * leaked feature" made maximally obvious on purpose — the point of Control F
+ * is not to be subtle, it is to prove the battery can tell a real leak apart
+ * from a fair strategy at all. Any real leak (e.g. an accidental `draws[i]`
+ * instead of `draws[i-1]` off-by-one, or a feature column built over the
+ * whole dataset before slicing) is a *milder* version of this same failure
+ * mode: peeking at `drawDate >= target` instead of restricting to history
+ * strictly before it.
+ */
+function createLeakedPick(targetDraw: DrawRecord): number[] {
+  return [...targetDraw.result].sort((a, b) => a - b);
+}
+
+/**
+ * Control F — future-only/leaked feature must fail (§B2/§B3 of the v2
+ * forensics blueprint). Controls A/B/C/E above all show what NO leak looks
+ * like: a fair or history-only process collapses toward EXPECTED_MATCHES
+ * (0.8) under every one of those manipulations. This control is the
+ * complement — it shows what a REAL leak looks like, by deliberately
+ * constructing a "ticket" for trial `index` that reads `draws[index].result`
+ * directly instead of the leak-safe `draws.slice(index - lookback, index)`
+ * window that `createStrategyPick` (and every walk-forward trial in
+ * `lib/analytics.ts`'s `buildWalkForwardSeries`) actually uses. That
+ * leak-safe slicing is exactly the pattern Control F is designed to catch
+ * violations of: if a future refactor of the walk-forward loop ever let
+ * `index` (or later) leak into the history a strategy sees, this control's
+ * `leakDetected` signature — average matches near 6, jackpot rate near 1,
+ * edge orders of magnitude above any real strategy's — is what that bug
+ * would look like, distinguishing it from genuine (absent) predictive edge.
+ *
+ * Reported for a human to read, per this file's header — but `leakDetected`
+ * is asserted in tests because an actual leak's signature here is not
+ * ambiguous the way A/B/C/E's coarse collapse-toward-null bounds are.
+ */
+export function runFutureLeakageControl(draws: DrawRecord[], lookback = 90): FutureLeakageControlResult {
+  const trialCount = draws.length - lookback;
+  if (trialCount <= 0) {
+    return { trials: 0, lookback, leakSafeEdge: 0, leakedEdge: 0, leakedAverageMatches: 0, leakedJackpotRate: 0, leakDetected: false };
+  }
+
+  const leakSafeMatches: number[] = [];
+  const leakedMatches: number[] = [];
+  for (let index = lookback; index < draws.length; index += 1) {
+    // Leak-safe: identical to what buildWalkForwardSeries does — history is
+    // strictly `draws[index-lookback .. index)`, never including `draws[index]`.
+    const history = draws.slice(index - lookback, index);
+    const target = draws[index];
+    leakSafeMatches.push(evaluateTicket(createStrategyPick(history, "HOT"), target.result).matches);
+
+    // Leaked: reads `target` (i.e. `draws[index]`, drawDate >= target by
+    // construction) directly. This is the violation Control F exists to catch.
+    leakedMatches.push(evaluateTicket(createLeakedPick(target), target.result).matches);
+  }
+
+  const leakSafeEdge = mean(leakSafeMatches) - EXPECTED_MATCHES;
+  const leakedAverageMatches = mean(leakedMatches);
+  const leakedEdge = leakedAverageMatches - EXPECTED_MATCHES;
+  const leakedJackpotRate = leakedMatches.filter((matches) => matches === 6).length / leakedMatches.length;
+  // A genuine leak here is unmistakable: every leaked ticket matches all 6
+  // numbers, so this is a loose sanity bound, not a fragile threshold.
+  const leakDetected = leakedAverageMatches >= 5 && leakedEdge > leakSafeEdge + 1;
+
+  return { trials: trialCount, lookback, leakSafeEdge, leakedEdge, leakedAverageMatches, leakedJackpotRate, leakDetected };
 }

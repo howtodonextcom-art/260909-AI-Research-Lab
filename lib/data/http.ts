@@ -37,6 +37,12 @@ export function assertAllowedUrl(url: string): URL {
   if (parsed.protocol !== "https:") {
     throw new HttpError(`Chỉ chấp nhận HTTPS, nhận được: ${parsed.protocol}`, null, false);
   }
+  if (parsed.username || parsed.password) {
+    throw new HttpError(`URL không được chứa credential: ${parsed.hostname}`, null, false);
+  }
+  if (parsed.port && parsed.port !== "443") {
+    throw new HttpError(`Port không được phép ngoài 443: ${parsed.port}`, null, false);
+  }
   if (!(ALLOWED_HOSTS as readonly string[]).includes(parsed.hostname)) {
     throw new HttpError(`Host không nằm trong allowlist: ${parsed.hostname}`, null, false);
   }
@@ -46,6 +52,12 @@ export function assertAllowedUrl(url: string): URL {
 function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+export const MAX_REDIRECTS = 5;
 
 async function readCapped(response: Response): Promise<string> {
   const declared = response.headers.get("content-length");
@@ -102,21 +114,12 @@ type RequestInput = {
 
 /**
  * Shared allowlisted request core: timeout, abort wiring, size-capped read
- * and bounded retry-with-backoff. `fetchGuarded` (GET + ETag) and
- * `postGuarded` (POST, used by the official AjaxPro history endpoint) are
- * thin, method-specific wrappers over this so both get identical guards.
+ * and bounded retry-with-backoff. Redirects are followed manually so every
+ * hop is re-checked against the host allowlist (native `redirect:"follow"`
+ * would only validate the first URL).
  */
-async function performRequest({
-  method,
-  url,
-  headers,
-  body,
-  fallbackEtag,
-  signal,
-  timeoutMs,
-}: RequestInput): Promise<GuardedResponse> {
-  assertAllowedUrl(url);
-
+async function performRequest(input: RequestInput): Promise<GuardedResponse> {
+  const { headers, fallbackEtag, signal, timeoutMs } = input;
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
@@ -128,30 +131,50 @@ async function performRequest({
     const timer = setTimeout(() => controller.abort(new Error("timeout")), timeoutMs);
 
     try {
-      const response = await fetch(url, {
-        method,
-        headers,
-        body,
-        signal: controller.signal,
-        redirect: "follow",
-      });
+      let currentUrl = input.url;
+      let method = input.method;
+      let body = input.body;
+      for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+        assertAllowedUrl(currentUrl);
+        const response = await fetch(currentUrl, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+          redirect: "manual",
+        });
 
-      if (response.status === 304) {
-        return { status: 304, etag: response.headers.get("etag") ?? fallbackEtag ?? null, text: null };
-      }
-      if (!response.ok) {
-        throw new HttpError(
-          `HTTP ${response.status} khi gọi ${url}`,
-          response.status,
-          isRetryableStatus(response.status),
-        );
-      }
+        if (isRedirectStatus(response.status)) {
+          const location = response.headers.get("location");
+          if (!location) {
+            throw new HttpError(`Redirect ${response.status} thiếu Location từ ${currentUrl}`, response.status, false);
+          }
+          currentUrl = new URL(location, currentUrl).href;
+          if (response.status === 303) {
+            method = "GET";
+            body = undefined;
+          }
+          continue;
+        }
 
-      return {
-        status: response.status,
-        etag: response.headers.get("etag"),
-        text: await readCapped(response),
-      };
+        if (response.status === 304) {
+          return { status: 304, etag: response.headers.get("etag") ?? fallbackEtag ?? null, text: null };
+        }
+        if (!response.ok) {
+          throw new HttpError(
+            `HTTP ${response.status} khi gọi ${currentUrl}`,
+            response.status,
+            isRetryableStatus(response.status),
+          );
+        }
+
+        return {
+          status: response.status,
+          etag: response.headers.get("etag"),
+          text: await readCapped(response),
+        };
+      }
+      throw new HttpError(`Quá số lần redirect cho phép (${MAX_REDIRECTS}) từ ${input.url}`, null, false);
     } catch (error) {
       lastError = error;
       const retryable = error instanceof HttpError ? error.retryable : !signal?.aborted;
@@ -166,7 +189,7 @@ async function performRequest({
 
   if (lastError instanceof HttpError) throw lastError;
   const message = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new HttpError(`Không thể gọi ${url}: ${message}`, null, true);
+  throw new HttpError(`Không thể gọi ${input.url}: ${message}`, null, true);
 }
 
 /**

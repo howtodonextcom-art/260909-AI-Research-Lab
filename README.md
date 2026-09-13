@@ -102,11 +102,22 @@ Không dùng `localStorage` vì bộ dữ liệu ~150 KB và còn tăng theo m�
 
 ### Tự động cập nhật
 
-Khi mở tab Nghiên cứu, ứng dụng hiển thị dữ liệu sẵn có ngay lập tức, **không chặn giao diện để chờ mạng**. Sau đó nếu `lastSuccessfulSync` đã quá TTL thì mới gọi mạng ngầm.
+Khi mở tab **Nghiên cứu** (tab mặc định), ứng dụng hiển thị dữ liệu sẵn có ngay lập tức, **không chặn giao diện để chờ mạng**. Sau đó nếu `lastSuccessfulSync` đã quá TTL thì mới gọi mạng ngầm qua `POST /api/data/refresh` (Worker + nguồn Vietlott chính thức).
 
 TTL mặc định **12 giờ**, khai báo tại một chỗ duy nhất: `DATA_REFRESH_TTL_MS` trong `lib/data/refresh.ts`.
 
-Chỉ một request được chạy tại một thời điểm; bấm nút nhiều lần không tạo nhiều request. Request có timeout, `AbortController`, giới hạn kích thước phản hồi và tối đa 3 lần thử với backoff.
+Chỉ một request được chạy tại một thời điểm; bấm nút nhiều lần không tạo nhiều request. Request có timeout, `AbortController`, giới hạn kích thước phản hồi và tối đa 3 lần thử với backoff. `force`/backfill **không** có trên API công khai — dùng CLI `npm run data:sync -- --force`.
+
+**Offline dataset:** nếu tải snapshot bundled thất bại nhưng IndexedDB còn bản hợp lệ, app vẫn khởi động bằng cache thiết bị (`chooseLoadedDataset`).
+
+### Scheduler local (khi không mở UI)
+
+```bash
+npm run data:schedule          # sync idempotent + log reports/scheduler/
+npm run data:schedule -- --force
+```
+
+Gắn vào Windows Task Scheduler / cron. Máy tắt thì không chạy được; lần chạy sau mới bù. Đối chiếu mirror (`npm run data:cross-check`) là công cụ tùy chọn, **không** nằm trên critical path cập nhật.
 
 ### Giới hạn Cloudflare Worker
 
@@ -120,7 +131,7 @@ Sync thất bại không đụng tới snapshot. Nếu cần kiểm tra hoặc k
 npm run data:check          # kiểm tra toàn vẹn, offline
 npm run data:status         # xem manifest hiện tại
 git checkout -- public/data # trả về snapshot đã commit
-npm run data:sync -- --force  # bỏ qua ETag, tải lại toàn bộ
+npm run data:sync -- --force  # bỏ qua ETag, tải lại toàn bộ (CLI quản trị)
 ```
 
 ## Công nghệ
@@ -130,6 +141,7 @@ npm run data:sync -- --force  # bỏ qua ETag, tải lại toàn bộ
 - Tailwind CSS 4
 - Radix UI / shadcn components
 - Cloudflare Workers qua Wrangler
+- GitHub Actions CI (typecheck, lint, test, data:check, build)
 
 ## Cài đặt và chạy local
 
@@ -191,7 +203,35 @@ Chi tiết đầy đủ và bằng chứng nằm trong `docs/adr/` và `reports/
 - **Negative controls** (bắt buộc, §28): IID synthetic, time-shuffle, random-baseline-tự-nhất-quán trong `lib/research/negative-controls.ts`; future-mutation đã có sẵn trong `lib/analytics.test.ts`.
 - **Experiment registry**: `reports/experiments/registry.jsonl` + một artifact JSON bất biến mỗi thử nghiệm, chạy bằng `npm run research:experiment`.
 
-## Cấu trúc dự án
+### Runbook vận hành: prospective freeze/append (khi kỳ mới thật sự về)
+
+`reports/protocol-lock.json` hiện khoá `prospectiveStartDrawId = "01562"` — kỳ này **chưa xảy ra**. `reports/prospective-scorecard.jsonl` đã có 4 dự đoán đóng băng (một mỗi chiến lược) chờ kỳ `#01562`. Đây là quy trình chính xác một người vận hành làm khi kỳ `#01562` (hoặc kỳ tiếp theo) thật sự về:
+
+1. **Đồng bộ dữ liệu trước** — không được append kết quả bằng tay:
+   ```bash
+   npm run data:sync
+   ```
+   Lệnh này lấy kỳ mới từ vietlott.vn và ghi vào `public/data/power645.jsonl` + manifest, atomic, chỉ khi mọi kiểm tra đạt.
+
+2. **Ghi kết quả cho các dự đoán đã đóng băng đang chờ**:
+   ```bash
+   npm run research:prospective-append
+   ```
+   - Thành công thật: in `ĐÃ GHI KẾT QUẢ CHO N KỲ (...)` kèm `matches`/`tier` từng chiến lược.
+   - **Chưa tới lượt** (trạng thái đúng hôm nay, trước khi `#01562` về): in `Không có kỳ nào đến hạn (chưa có kết quả thật cho các kỳ đang chờ). Không có gì để làm.` và thoát mã 0 — đây là **từ chối đúng**, không phải lỗi. Nó có nghĩa dataset chưa chứa kết quả thật cho kỳ đang chờ, nên không có gì để chấm điểm (chống peek).
+
+3. **Đóng băng dự đoán cho kỳ kế tiếp** (sau khi kỳ vừa rồi đã được append ở bước 2):
+   ```bash
+   npm run research:prospective-freeze
+   ```
+   - Mặc định freeze kỳ `next` (kỳ liền sau `latestDrawId` trong dataset hiện có). Thành công thật: in `ĐÃ ĐÓNG BĂNG N DỰ ĐOÁN CHO KỲ #...` kèm từng vé.
+   - **Từ chối đúng** khi: `protocolHash` không khớp lock (đã đổi protocol — không được gắn nhãn prospective sau khi đổi luật); kỳ mục tiêu đã có kết quả thật trong dataset (không được "dự đoán" kỳ đã biết); hoặc chưa có `reports/protocol-lock.json` hợp lệ (chạy `npm run research:lock` trước). Mọi từ chối đều thoát khác 0 và **không ghi file** — không có trạng thái nửa vời.
+
+4. **Xác nhận không đụng lịch sử**: `git diff reports/prospective-scorecard.jsonl` chỉ nên có dòng mới được **thêm vào cuối** (append-only) — không dòng cũ nào bị sửa. Nếu thấy dòng cũ đổi, đó là bug, không commit.
+
+Thứ tự đúng luôn là **sync → append (kỳ cũ) → freeze (kỳ mới)**, không bao giờ ngược lại — freeze trước khi append nghĩa là chưa chấm điểm dự đoán cũ mà đã mở dự đoán mới, vẫn an toàn về mặt chống-peek nhưng dễ gây nhầm lẫn vận hành.
+
+
 
 ```text
 app/                          Trang và giao diện chính
@@ -243,4 +283,4 @@ test/fixtures/                Dữ liệu mẫu cho test
 
 Dự án này độc lập, không liên kết và không được Vietlott bảo trợ. Thông tin luật chơi hoặc cơ cấu giải có thể thay đổi; hãy đối chiếu nguồn chính thức trước khi ra quyết định mua vé.
 
-Repo hiện chưa khai báo giấy phép cho mã nguồn dự án. Giấy phép MIT nêu ở phần dữ liệu chỉ áp dụng cho nguồn dữ liệu upstream tương ứng.
+Mã nguồn dự án được cấp phép theo **MIT** — xem file [`LICENSE`](./LICENSE) tại gốc repo (đã đồng bộ với trường `license` trong `package.json`). Giấy phép này chỉ áp dụng cho mã nguồn ứng dụng; nó không cấp quyền gì đối với luật chơi, cơ cấu giải hay nhãn hiệu của Vietlott, và không thay đổi vai trò/giấy phép của các nguồn dữ liệu upstream đã nêu ở phần "Dữ liệu" (vietlott.vn — trang công khai, chưa có giấy phép tái sử dụng rõ ràng; mirror `vietvudanh/vietlott-data` — MIT, giữ nguyên).
