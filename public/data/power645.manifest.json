@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
   "product": "mega645",
-  "recordCount": 1561,
+  "recordCount": 1562,
   "firstDrawId": "00001",
   "firstDrawDate": "2016-07-20",
-  "latestDrawId": "01561",
-  "latestDrawDate": "2026-09-11",
-  "lastAttemptedSync": "2026-09-11T17:54:45.045Z",
-  "lastSuccessfulSync": "2026-09-11T17:54:45.045Z",
+  "latestDrawId": "01562",
+  "latestDrawDate": "2026-09-13",
+  "lastAttemptedSync": "2026-09-13T12:43:29.252Z",
+  "lastSuccessfulSync": "2026-09-13T12:43:29.252Z",
   "source": {
     "primary": {
       "id": "vietlott-official",
@@ -20,8 +20,8 @@
       "license": "MIT"
     }
   },
-  "sourceEtag": "01561",
-  "datasetSha256": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
+  "sourceEtag": "01562",
+  "datasetSha256": "9ce627724ddbee2f83f523c92df7fa83f0cd9b0bbe7fbf00b049ab0bd1c05b0b",
   "validation": {
     "valid": true,
     "duplicates": 0,

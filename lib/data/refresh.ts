@@ -147,6 +147,9 @@ export function refreshDataset(current: LoadedDataset, options: { force?: boolea
     signal: options.signal,
     body: JSON.stringify({
       force: Boolean(options.force),
+      // Always revalidate the politeness cache on client refresh so a prior
+      // empty incremental result cannot mask a newly published draw.
+      revalidateOfficialCache: true,
       records: current.records,
       manifest: current.manifest,
     }),

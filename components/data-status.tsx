@@ -35,7 +35,7 @@ function describe(state: DrawDataState): { label: string; tone: "ok" | "busy" | 
     case "updated":
       return { label: "Có dữ liệu mới", tone: "ok" };
     case "up-to-date":
-      return { label: "Không có dữ liệu mới", tone: "ok" };
+      return { label: "Không thấy kỳ mới lần này", tone: "ok" };
     case "conflict":
       return { label: "Dữ liệu xung đột", tone: "bad" };
     case "error":
@@ -58,9 +58,19 @@ function Message({ state }: { state: DrawDataState }) {
     );
   }
   if (refresh.kind === "up-to-date") {
+    const tip = state.records.at(-1);
     return (
       <p className="data-status-message data-status-ok">
-        <Check aria-hidden="true" /> Dữ liệu đã là phiên bản mới nhất.
+        <Check aria-hidden="true" /> Không thấy kỳ mới hơn trong lần kiểm tra nguồn vừa rồi
+        {tip ? (
+          <>
+            {" "}
+            — bộ dữ liệu local hiện tới #{tip.id} ({formatDate(tip.date)}).
+          </>
+        ) : (
+          "."
+        )}{" "}
+        Đây không phải lời khẳng định tuyệt đối rằng Vietlott sẽ không công bố kỳ mới ngay sau đó.
       </p>
     );
   }

@@ -34,7 +34,8 @@ class CountingAdapter implements DrawSourceAdapter {
   async fetchSince(cursor: SyncCursor): Promise<SourceResponse> {
     this.calls += 1;
     this.lastKind = "since";
-    return { raw: null, etag: cursor.latestId };
+    // Non-empty so the politeness cache may store it (empty/null is intentionally not cached).
+    return { raw: [{ id: "00201", date: "2017-11-01", result: [1, 2, 3, 4, 5, 6] }], etag: "00201" };
   }
 
   normalize(raw: RawDraw) {
@@ -81,6 +82,56 @@ test("fetchSince cùng latestId dùng chung cache, không khóa theo records c�
   await wrapped.fetchSince({ ...cursor, etag: "other-user-etag" });
   assert.equal(adapter.calls, 1);
   assert.equal(officialFetchCacheKey("since", cursor), "official:vietlott-official:fetchSince:00200");
+});
+
+test("không cache raw:null / mảng rỗng — tránh khóa 'không có kỳ mới' trong TTL 12h", async () => {
+  class EmptySinceAdapter extends CountingAdapter {
+    async fetchSince(cursor: SyncCursor): Promise<SourceResponse> {
+      this.calls += 1;
+      this.lastKind = "since";
+      return { raw: null, etag: cursor.latestId };
+    }
+  }
+  const adapter = new EmptySinceAdapter();
+  const cache = createMemoryOfficialFetchCache();
+  const wrapped = wrapAdapterWithOfficialFetchCache(adapter, { store: cache });
+  const cursor = { etag: "01561", latestDrawDate: "2026-09-11", latestId: "01561" };
+  await wrapped.fetchSince(cursor);
+  await wrapped.fetchSince(cursor);
+  assert.equal(adapter.calls, 2, "empty incremental phải revalidate mỗi lần");
+  assert.equal(cache.size(), 0);
+});
+
+test("revalidateOfficialCache trên public path bỏ qua cache nhưng không fetchAll", async () => {
+  const adapter = new CountingAdapter();
+  const cache = createMemoryOfficialFetchCache();
+  const manifest = {
+    schemaVersion: 2 as const,
+    product: "mega645" as const,
+    recordCount: BASE.length,
+    firstDrawId: "00198",
+    firstDrawDate: "2017-10-25",
+    latestDrawId: "00200",
+    latestDrawDate: "2017-10-29",
+    lastAttemptedSync: "2017-10-29T00:00:00.000Z",
+    lastSuccessfulSync: "2017-10-29T00:00:00.000Z",
+    source: { primary: { id: "vietlott-official", url: "https://vietlott.vn/history", license: "public" }, secondary: null },
+    sourceEtag: "00200",
+    datasetSha256: "0".repeat(64),
+    validation: { valid: true, duplicates: 0, conflicts: 0, rejected: 0, missingIds: [] },
+    crossCheck: { status: "NOT_RUN" as const, sampleSize: 0, checkedAt: null },
+  };
+  await handleDataRefresh({ records: BASE, manifest }, { adapter, cache });
+  assert.equal(adapter.calls, 1);
+  assert.equal(adapter.lastKind, "since");
+  await handleDataRefresh({ records: BASE, manifest }, { adapter, cache });
+  assert.equal(adapter.calls, 1, "payload dương vẫn được cache");
+  await handleDataRefresh(
+    { records: BASE, manifest, revalidateOfficialCache: true },
+    { adapter, cache },
+  );
+  assert.equal(adapter.calls, 2, "revalidate phải bỏ qua cache");
+  assert.equal(adapter.lastKind, "since", "revalidate không được ép fetchAll");
 });
 
 test("handleDataRefresh lần 2 trong TTL không hit official; force vẫn hit", async () => {

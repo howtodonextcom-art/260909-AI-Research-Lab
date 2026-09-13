@@ -82,11 +82,23 @@ export async function resolveOfficialFetchCacheStore(inject?: OfficialFetchCache
   return isolateMemory;
 }
 
+/**
+ * Empty / not-modified incremental results must NOT be cached for the long
+ * politeness TTL. Caching `{ raw: null }` for 12h caused a false "đã mới nhất"
+ * after Vietlott published a newer draw within the window (2026-09-13 #01562).
+ */
+export function isCacheableOfficialResponse(response: SourceResponse): boolean {
+  if (response.raw === null) return false;
+  if (Array.isArray(response.raw) && response.raw.length === 0) return false;
+  return true;
+}
+
 export function wrapAdapterWithOfficialFetchCache(
   adapter: DrawSourceAdapter,
   options: {
     store: OfficialFetchCacheStore;
     ttlMs?: number;
+    /** Skip reading/writing the politeness cache (still uses fetchSince when sync is soft). */
     force?: boolean;
   },
 ): DrawSourceAdapter {
@@ -105,7 +117,10 @@ export function wrapAdapterWithOfficialFetchCache(
 
     const task = (async () => {
       const response = await run();
-      await options.store.set(key, JSON.stringify(response), ttlMs);
+      // Only cache positive payloads — never freeze "no newer draws" for 12h.
+      if (isCacheableOfficialResponse(response)) {
+        await options.store.set(key, JSON.stringify(response), ttlMs);
+      }
       return response;
     })().finally(() => {
       inflight.delete(key);

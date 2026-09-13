@@ -11,6 +11,11 @@ import {
 
 export type RefreshRequest = {
   force?: boolean;
+  /**
+   * Public-safe: bypass the official politeness cache without a full `fetchAll`.
+   * Distinct from `force` (admin-only), which also nulls the sync ETag cursor.
+   */
+  revalidateOfficialCache?: boolean;
   records?: DrawRecord[];
   manifest?: DatasetManifest | null;
 };
@@ -51,6 +56,9 @@ export function parseRefreshRequest(
       status: 403,
     };
   }
+  if (body.revalidateOfficialCache !== undefined && typeof body.revalidateOfficialCache !== "boolean") {
+    return { ok: false, error: "revalidateOfficialCache phải là boolean.", status: 400 };
+  }
 
   if (body.records !== undefined && !Array.isArray(body.records)) {
     return { ok: false, error: "records phải là mảng.", status: 400 };
@@ -71,6 +79,7 @@ export function parseRefreshRequest(
     ok: true,
     value: {
       force: Boolean(body.force),
+      revalidateOfficialCache: Boolean(body.revalidateOfficialCache),
       records: Array.isArray(body.records) ? (body.records as DrawRecord[]) : [],
       manifest: (body.manifest as DatasetManifest | null | undefined) ?? null,
     },
@@ -92,6 +101,9 @@ export async function handleDataRefresh(
   } = {},
 ): Promise<RefreshResult> {
   const force = Boolean(body.force) && Boolean(deps.allowForce);
+  // Cache bypass is allowed on the public path so a user refresh cannot be
+  // stuck on a cached empty incremental result; it does NOT trigger fetchAll.
+  const bypassOfficialCache = force || Boolean(body.revalidateOfficialCache);
   const snapshot: SnapshotState = {
     records: Array.isArray(body.records) ? body.records : [],
     manifest: body.manifest ?? null,
@@ -99,7 +111,10 @@ export async function handleDataRefresh(
   let savedRecords: DrawRecord[] | null = null;
   let savedManifest: DatasetManifest | null = null;
   const store = await resolveOfficialFetchCacheStore(deps.cache);
-  const adapter = wrapAdapterWithOfficialFetchCache(deps.adapter ?? vietlottOfficialAdapter, { store, force });
+  const adapter = wrapAdapterWithOfficialFetchCache(deps.adapter ?? vietlottOfficialAdapter, {
+    store,
+    force: bypassOfficialCache,
+  });
 
   const summary = await runSync(
     {

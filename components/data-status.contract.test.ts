@@ -32,3 +32,8 @@ test("DataStatus surface Fresh/Delayed/Stale/Unknown freshness labels", () => {
   assert.match(source, /Fresh \/ Delayed \/ Stale \/ Unknown/);
   assert.match(source, /Độ tươi/);
 });
+
+test("DataStatus không khẳng định tuyệt đối 'phiên bản mới nhất' khi up-to-date", () => {
+  assert.doesNotMatch(source, /Dữ liệu đã là phiên bản mới nhất/);
+  assert.match(source, /Không thấy kỳ mới hơn trong lần kiểm tra nguồn vừa rồi/);
+});
