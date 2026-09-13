@@ -33,6 +33,7 @@ import { baoCost, baoJackpotProbability, baoTickets } from "./bao";
 import { createRng } from "./rng";
 import { choose } from "../profit";
 import { FIXED_PRIZE, MEGA_645 } from "../mega645";
+import { sha256Hex } from "../data/hash";
 import type { DrawRecord } from "../data/types";
 
 export const POOL_SIZE = 18 as const;
@@ -382,13 +383,33 @@ export function exactMcNemar(b: number, c: number, minDiscordant = 6): McNemarRe
   return { kind: "exact", discordant, pValue: Math.min(1, 2 * oneSided) };
 }
 
-export type PairedSignFlipResult = { meanDelta: number; ciLower: number; ciUpper: number; twoSidedPValue: number; iterations: number };
+export type PairedSignFlipResult = {
+  meanDelta: number;
+  /**
+   * NOT a confidence interval for the true effect ΔK. These are the 2.5th/97.5th
+   * percentiles of the sign-flip NULL RANDOMIZATION distribution (deltas with
+   * random signs applied, i.e. what ΔK would look like if rule and RANDOM18
+   * were exchangeable). A null-randomization interval is centered on the
+   * null's behavior, not on the estimator's sampling distribution, so it does
+   * NOT have valid coverage for the true mean ΔK — do not present it as "CI95"
+   * anywhere downstream. Use `pairedBootstrapCI` for an actual CI on ΔK.
+   */
+  nullRandomizationLower: number;
+  nullRandomizationUpper: number;
+  twoSidedPValue: number;
+  iterations: number;
+};
 
 /**
- * Deterministic seeded sign-flip permutation test/CI for the paired mean
+ * Deterministic seeded sign-flip permutation test for the paired mean
  * intersection difference ΔK = K_rule - K_random. No closed form exists for
  * this comparator, so Monte Carlo is the permitted use per §7 — always
  * reseeded from the experiment's own global seed, never `Math.random`.
+ *
+ * `twoSidedPValue` is a valid exact(-ish) permutation p-value. The
+ * `nullRandomizationLower/Upper` percentiles are NOT a valid confidence
+ * interval for the true ΔK — see `PairedSignFlipResult` doc comment and
+ * `pairedBootstrapCI` for the actual CI.
  */
 export function pairedSignFlipTest(deltas: readonly number[], seed: number, iterations = 10000): PairedSignFlipResult {
   const observedMean = deltas.reduce((s, d) => s + d, 0) / Math.max(1, deltas.length);
@@ -405,11 +426,43 @@ export function pairedSignFlipTest(deltas: readonly number[], seed: number, iter
   const extremeCount = samples.filter((s) => Math.abs(s) >= Math.abs(observedMean)).length;
   return {
     meanDelta: observedMean,
-    ciLower: samples[lowerIndex],
-    ciUpper: samples[upperIndex],
+    nullRandomizationLower: samples[lowerIndex],
+    nullRandomizationUpper: samples[upperIndex],
     twoSidedPValue: Math.min(1, extremeCount / iterations),
     iterations,
   };
+}
+
+export type PairedBootstrapCI95 = { lower: number; upper: number; iterations: number };
+
+/**
+ * Paired (case) bootstrap 95% CI for the true mean ΔK = K_rule - K_random.
+ * Resamples the n paired observations WITH REPLACEMENT (deterministic seeded
+ * RNG, never `Math.random`) and takes the 2.5th/97.5th percentiles of the
+ * resampled-mean distribution. Unlike `pairedSignFlipTest`'s null-randomization
+ * interval — which describes the null's behavior — this resamples the
+ * OBSERVED data itself, so it has valid (approximate) coverage for the true
+ * effect. Resampling the deltas array with replacement is equivalent to
+ * resampling the (K_rule, K_random) pairs with replacement, since
+ * ΔK_i = K_rule_i - K_random_i is fixed per original pair index i.
+ */
+export function pairedBootstrapCI(deltas: readonly number[], seed: number, iterations = 10000): PairedBootstrapCI95 {
+  const n = deltas.length;
+  if (n === 0) return { lower: 0, upper: 0, iterations };
+  const rng = createRng(seed);
+  const resampledMeans: number[] = [];
+  for (let i = 0; i < iterations; i += 1) {
+    let sum = 0;
+    for (let j = 0; j < n; j += 1) {
+      const pick = Math.min(n - 1, Math.floor(rng() * n));
+      sum += deltas[pick];
+    }
+    resampledMeans.push(sum / n);
+  }
+  resampledMeans.sort((a, b) => a - b);
+  const lowerIndex = Math.max(0, Math.floor(0.025 * iterations));
+  const upperIndex = Math.min(iterations - 1, Math.ceil(0.975 * iterations) - 1);
+  return { lower: resampledMeans[lowerIndex], upper: resampledMeans[upperIndex], iterations };
 }
 
 // ---------------------------------------------------------------------------
@@ -422,6 +475,50 @@ export function hypergeometricPmf(poolSize: number, k: number): number {
 
 export function hypergeometricExpectedK(poolSize: number): number {
   return MEGA_645.pickCount * (poolSize / MEGA_645.max);
+}
+
+// ---------------------------------------------------------------------------
+// Scientific identity vs build provenance — mirrors `protocol.ts`'s
+// `canonicalProtocolJson`/`computeProtocolHash` pattern exactly. A commit
+// (gitHead), a branch, or a wall-clock timestamp must NEVER change what
+// counts as "the same experiment" — only genuine research-defining inputs
+// may. Build/runtime provenance (gitHead, branch, workingTreeStatus,
+// generatedAt, runtimeVersion) is a SEPARATE, unhashed-here concern that the
+// CLI attaches to the artifact alongside this hash, never inside it.
+// ---------------------------------------------------------------------------
+
+export type Bao18ScientificSpec = {
+  experiment: string;
+  version: string;
+  datasetSha256: string;
+  lookback: number;
+  seed: number;
+  rules: readonly Bao18Rule[];
+  primaryEndpoint: string;
+  null: string;
+  alpha: number;
+  holmFamily: readonly Bao18NonRandomRule[];
+};
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, val]) => [key, sortKeysDeep(val)]),
+    );
+  }
+  return value;
+}
+
+export function canonicalScientificSpecJson(spec: Bao18ScientificSpec): string {
+  return JSON.stringify(sortKeysDeep(spec));
+}
+
+/** Hash of ONLY the scientific spec — excludes gitHead/branch/timestamps by construction (they are not fields of `Bao18ScientificSpec`). */
+export function computeScientificSpecHash(spec: Bao18ScientificSpec): Promise<string> {
+  return sha256Hex(canonicalScientificSpecJson(spec));
 }
 
 export { baoCost, baoJackpotProbability, baoTickets };

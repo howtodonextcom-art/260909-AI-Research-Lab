@@ -20,7 +20,7 @@
  */
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
 import { serializeDrawsJsonl } from "../lib/data/jsonl";
@@ -36,18 +36,22 @@ import {
   binomialQuantile,
   binomialTailAtLeast,
   clopperPearsonCI,
+  combineSeed,
+  computeScientificSpecHash,
   evaluationRange,
   exactMcNemar,
   fixedPrizePayoutForDraw,
   holmBonferroni,
   hypergeometricExpectedK,
   hypergeometricPmf,
+  pairedBootstrapCI,
   pairedSignFlipTest,
   runProtocolA,
   runRuleWalkForward,
   type Bao18NonRandomRule,
   type Bao18Observation,
   type Bao18Rule,
+  type Bao18ScientificSpec,
 } from "../lib/research/bao18-walkforward";
 
 const SEED = 645; // matches this repo's other research CLIs (negative-controls, portfolio-mc)
@@ -57,18 +61,6 @@ const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 function fail(message: string): never {
   console.error(`\nSTOP (§35 fail-closed): ${message}`);
   process.exit(1);
-}
-
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([key, val]) => [key, sortKeysDeep(val)]),
-    );
-  }
-  return value;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +83,57 @@ try {
 console.log(`  Git HEAD: ${gitHead}`);
 console.log(`  Branch:   ${gitBranch}`);
 console.log(`  Worktree: ${workingTreeStatus}`);
+
+// ---------------------------------------------------------------------------
+// Anti-leak evidence gate — the artifact's §K claims "N anti-leak tests pass"
+// only if THIS RUN actually just spawned the test file as a child process and
+// verified it exited 0. Fail-closed: refuse to write the artifact otherwise,
+// and never accept a hardcoded "PASS" string as evidence.
+// ---------------------------------------------------------------------------
+console.log("\n== Anti-leak evidence gate ==");
+const testRelativePath = "lib/research/bao18-walkforward.test.ts";
+let testFileSource: string;
+try {
+  testFileSource = await readFile(`${projectRoot}${testRelativePath}`, "utf8");
+} catch (error) {
+  fail(`không đọc được test file để tính evidence hash: ${error instanceof Error ? error.message : String(error)}`);
+}
+const testFileSha256 = await sha256Hex(testFileSource);
+const testGateCommand = `node --import=tsx --test ${testRelativePath}`;
+let testExitCode = 0;
+let testStdout = "";
+let testStderr = "";
+try {
+  const output = execSync(testGateCommand, { cwd: projectRoot, stdio: "pipe" });
+  testStdout = output.toString();
+} catch (error) {
+  const err = error as { status?: number | null; stdout?: Buffer; stderr?: Buffer };
+  testExitCode = err.status ?? 1;
+  testStdout = err.stdout?.toString() ?? "";
+  testStderr = err.stderr?.toString() ?? "";
+}
+const testVerifiedAt = new Date().toISOString();
+console.log(`  Test file: ${testRelativePath}`);
+console.log(`  Test file SHA-256: ${testFileSha256}`);
+console.log(`  Command: ${testGateCommand}`);
+console.log(`  Exit code: ${testExitCode}`);
+if (testExitCode !== 0) {
+  console.error(testStdout);
+  console.error(testStderr);
+  fail(`anti-leak test suite KHÔNG pass (exit code ${testExitCode}) — từ chối ghi artifact (§35 fail-closed).`);
+}
+const testPassCountMatch = testStdout.match(/pass\s+(\d+)/);
+const testFailCountMatch = testStdout.match(/fail\s+(\d+)/);
+const antiLeakEvidence = {
+  testFile: testRelativePath,
+  testFileSha256,
+  command: testGateCommand,
+  exitCode: testExitCode,
+  passCount: testPassCountMatch ? Number(testPassCountMatch[1]) : null,
+  failCount: testFailCountMatch ? Number(testFailCountMatch[1]) : null,
+  verifiedAt: testVerifiedAt,
+};
+console.log(`  ✓ Test suite exited 0 at ${testVerifiedAt} (pass=${antiLeakEvidence.passCount ?? "?"}, fail=${antiLeakEvidence.failCount ?? "?"}) — evidence embedded in artifact.`);
 
 const paths = resolvePaths(projectRoot);
 let snapshot;
@@ -121,7 +164,16 @@ if (manifestHash !== recomputedHash) {
 console.log("  ✓ Hash khớp manifest — dataset toàn vẹn.");
 
 // ---------------------------------------------------------------------------
-// §10 / §26 — Resolve lookback, freeze experiment spec, hash it
+// §10 / §26 — Resolve lookback, freeze SCIENTIFIC spec, hash it
+//
+// `scientificSpec` holds ONLY research-defining inputs. Build/runtime facts
+// (gitHead, branch, workingTreeStatus, generatedAt) live in `buildProvenance`
+// instead (assembled after `now` below) and are NEVER part of this hash — a
+// new commit between two identical-inputs runs must not change what counts
+// as "the same experiment". See `computeScientificSpecHash` in
+// lib/research/bao18-walkforward.ts (mirrors protocol.ts's canonical-hash
+// pattern) — this script imports the real hashing function rather than
+// reimplementing it.
 // ---------------------------------------------------------------------------
 const resolvedLookback =
   Number.isInteger(CURRENT_PROTOCOL.lookback) && CURRENT_PROTOCOL.lookback > 0 ? CURRENT_PROTOCOL.lookback : 90;
@@ -130,22 +182,23 @@ if (!Number.isInteger(ticketPrice) || ticketPrice <= 0) fail("không xác địn
 
 const RULE_FAMILY: Bao18Rule[] = ["RANDOM18", ...BAO18_NON_RANDOM_RULES];
 
-const experimentSpec = {
+const scientificSpec: Bao18ScientificSpec = {
   experiment: "bao18-walkforward-reverse-audit",
   version: "2.0",
   datasetSha256: recomputedHash,
-  gitHead,
   lookback: resolvedLookback,
   seed: SEED,
   rules: RULE_FAMILY,
   primaryEndpoint: "poolHit6",
   null: "C(18,6)/C(45,6)",
+  alpha: ALPHA,
+  holmFamily: BAO18_NON_RANDOM_RULES,
 };
-const experimentSpecHash = await sha256Hex(JSON.stringify(sortKeysDeep(experimentSpec)));
+const scientificSpecHash = await computeScientificSpecHash(scientificSpec);
 console.log(`\n  Lookback đã khóa: ${resolvedLookback}`);
 console.log(`  Seed: ${SEED}`);
 console.log(`  Rule family: ${RULE_FAMILY.join(", ")}`);
-console.log(`  experimentSpecHash: ${experimentSpecHash}`);
+console.log(`  scientificSpecHash: ${scientificSpecHash} (KHÔNG bao gồm gitHead/branch/timestamp — xem buildProvenance riêng)`);
 
 // ---------------------------------------------------------------------------
 // §26 — Artifact identity / collision guard (fail-closed, never overwrite)
@@ -159,6 +212,19 @@ const mdPath = `${projectRoot}${reportBase}.md`;
 if (existsSync(jsonPath) || existsSync(mdPath)) {
   fail(`artifact đã tồn tại tại ${reportBase}.{json,md} — không overwrite, chạy lại ở phút khác để có timestamp mới.`);
 }
+
+// Build/runtime provenance — deliberately SEPARATE from `scientificSpecHash`
+// above. Two artifacts with the same `scientificSpecHash` represent the same
+// science even if `buildProvenance` differs (different commit, different
+// minute); two artifacts with different `scientificSpecHash` do NOT, no
+// matter how similar `buildProvenance` looks.
+const buildProvenance = {
+  gitHead,
+  branch: gitBranch,
+  workingTreeStatus,
+  generatedAt: now.toISOString(),
+  runtimeVersion: process.version,
+};
 
 // ---------------------------------------------------------------------------
 // Math recap (§4/§20) + theoretical null (§7)
@@ -307,8 +373,15 @@ console.log("\n== Paired comparison vs RANDOM18 ==");
 type PairedReport = {
   rule: Bao18NonRandomRule;
   meanDeltaK: number;
-  ciLower: number;
-  ciUpper: number;
+  /**
+   * NOT a confidence interval for the true ΔK — percentiles of the sign-flip
+   * NULL RANDOMIZATION distribution. See `pairedBootstrapCI95` below for the
+   * actual CI. Kept only because the sign-flip p-value is computed from the
+   * same procedure; do not present these bounds as "CI95" anywhere.
+   */
+  nullRandomizationInterval: { lower: number; upper: number };
+  /** Valid (approximate) 95% CI for the true mean ΔK — paired bootstrap, 10,000 resamples. */
+  pairedBootstrapCI95: { lower: number; upper: number };
   twoSidedPValue: number;
   contingency: { bothHit: number; bothMiss: number; ruleHitRandomMiss: number; ruleMissRandomHit: number };
   mcNemar: { kind: "exact"; discordant: number; pValue: number } | { kind: "insufficient" };
@@ -318,6 +391,12 @@ BAO18_NON_RANDOM_RULES.forEach((rule, index) => {
   const ruleObs = observationsByRule.get(rule)!;
   const deltas = ruleObs.map((o, i) => o.k - randomObservations[i].k);
   const signFlip = pairedSignFlipTest(deltas, SEED + 1000 + index, 10000);
+  // Distinct seed derivation (combineSeed, not the same raw offset) so the
+  // bootstrap resampling stream is genuinely independent of the sign-flip
+  // stream — proves these are two different procedures, not the same code
+  // path reused under two names (see the regression test in
+  // bao18-walkforward.test.ts).
+  const bootstrap = pairedBootstrapCI(deltas, combineSeed(SEED + 1000 + index, 0xb00757ab), 10000);
   let bothHit = 0;
   let bothMiss = 0;
   let ruleHitRandomMiss = 0;
@@ -333,15 +412,17 @@ BAO18_NON_RANDOM_RULES.forEach((rule, index) => {
   pairedReports.push({
     rule,
     meanDeltaK: signFlip.meanDelta,
-    ciLower: signFlip.ciLower,
-    ciUpper: signFlip.ciUpper,
+    nullRandomizationInterval: { lower: signFlip.nullRandomizationLower, upper: signFlip.nullRandomizationUpper },
+    pairedBootstrapCI95: { lower: bootstrap.lower, upper: bootstrap.upper },
     twoSidedPValue: signFlip.twoSidedPValue,
     contingency: { bothHit, bothMiss, ruleHitRandomMiss, ruleMissRandomHit },
     mcNemar,
   });
   const mcNemarStr = mcNemar.kind === "exact" ? `p=${mcNemar.pValue.toExponential(3)} (n_discordant=${mcNemar.discordant})` : "INSUFFICIENT_DISCORDANT_EVENTS";
   console.log(
-    `  ${rule.padEnd(10)}: ΔK mean=${signFlip.meanDelta.toFixed(4)} CI95=[${signFlip.ciLower.toFixed(4)}, ${signFlip.ciUpper.toFixed(4)}] ` +
+    `  ${rule.padEnd(10)}: ΔK mean=${signFlip.meanDelta.toFixed(4)} ` +
+      `null-randomization[${signFlip.nullRandomizationLower.toFixed(4)}, ${signFlip.nullRandomizationUpper.toFixed(4)}] (NOT a CI) ` +
+      `bootstrap-CI95=[${bootstrap.lower.toFixed(4)}, ${bootstrap.upper.toFixed(4)}] ` +
       `sign-flip p=${signFlip.twoSidedPValue.toFixed(4)} | McNemar: ${mcNemarStr}`,
   );
 });
@@ -402,18 +483,16 @@ for (const rule of BAO18_NON_RANDOM_RULES) {
 // §30/§31 — Write JSON artifact
 // ---------------------------------------------------------------------------
 const artifact = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: now.toISOString(),
-  gitHead,
-  branch: gitBranch,
-  workingTreeStatus,
+  buildProvenance,
   datasetSha256: recomputedHash,
   datasetRecordCount: draws.length,
   firstDraw: { id: draws[0].id, date: draws[0].date },
   latestDraw: { id: draws.at(-1)!.id, date: draws.at(-1)!.date },
   lookback: resolvedLookback,
   seed: SEED,
-  experimentSpecHash,
+  scientificSpecHash,
   math: {
     totalCombinations,
     bao18Tickets,
@@ -446,8 +525,12 @@ const artifact = {
   },
   verdictsByRule: Object.fromEntries(BAO18_NON_RANDOM_RULES.map((rule) => [rule, verdicts.get(rule)!])),
   antiLeakTests: {
-    note: "Xem lib/research/bao18-walkforward.test.ts — 5 anti-leak tests + closed-form proof-by-test đều PASS (npm test).",
-    allPassing: true,
+    note:
+      "Evidence-gated (not a hardcoded claim): this CLI run spawned lib/research/bao18-walkforward.test.ts as a " +
+      "child process at generation time and refused to write this artifact unless it exited 0 — see `evidence` for " +
+      "the exact source hash, command, and verification timestamp.",
+    allPassing: antiLeakEvidence.exitCode === 0,
+    evidence: antiLeakEvidence,
   },
   finalVerdict,
   scientificGrade: "C — NO DEMONSTRATED EDGE",
@@ -481,7 +564,7 @@ const distributionRows = Array.from({ length: 7 }, (_, k) => {
 const pairedRows = pairedReports
   .map((p) => {
     const mcNemarStr = p.mcNemar.kind === "exact" ? `p=${p.mcNemar.pValue.toExponential(3)} (n=${p.mcNemar.discordant})` : "INSUFFICIENT_DISCORDANT_EVENTS";
-    return `| ${p.rule} | ${p.meanDeltaK.toFixed(4)} | [${p.ciLower.toFixed(4)}, ${p.ciUpper.toFixed(4)}] | ${p.twoSidedPValue.toFixed(4)} | ${p.contingency.bothHit} | ${p.contingency.bothMiss} | ${p.contingency.ruleHitRandomMiss} | ${p.contingency.ruleMissRandomHit} | ${mcNemarStr} |`;
+    return `| ${p.rule} | ${p.meanDeltaK.toFixed(4)} | [${p.nullRandomizationInterval.lower.toFixed(4)}, ${p.nullRandomizationInterval.upper.toFixed(4)}] | [${p.pairedBootstrapCI95.lower.toFixed(4)}, ${p.pairedBootstrapCI95.upper.toFixed(4)}] | ${p.twoSidedPValue.toFixed(4)} | ${p.contingency.bothHit} | ${p.contingency.bothMiss} | ${p.contingency.ruleHitRandomMiss} | ${p.contingency.ruleMissRandomHit} | ${mcNemarStr} |`;
   })
   .join("\n");
 
@@ -532,7 +615,8 @@ ${anySignal ? "" : "> Reverse-peek có thể tạo ra ảo giác chiến thắng
 | Kỳ đánh giá đầu/cuối | #${draws[range.start]?.id} / ${draws[range.start]?.date} → #${draws[range.end]?.id} / ${draws[range.end]?.date} |
 | Lookback (khóa) | ${resolvedLookback} |
 | Seed | ${SEED} |
-| Experiment spec hash | \`${experimentSpecHash}\` |
+| Scientific spec hash | \`${scientificSpecHash}\` (KHÔNG bao gồm gitHead/branch/timestamp — 2 artifact cùng hash này = cùng khoa học, kể cả khi commit/thời gian chạy khác nhau) |
+| Runtime version | \`${buildProvenance.runtimeVersion}\` |
 
 ---
 
@@ -587,11 +671,15 @@ RANDOM18 đóng vai trò kiểm tra thực nghiệm rằng công thức hypergeo
 
 Mỗi kỳ đánh giá được chấm điểm bởi cả rule và RANDOM18 (paired), nên so sánh trực tiếp ΔK = K_rule − K_random hợp lệ hơn so sánh hai baseline độc lập.
 
-| Rule | Mean ΔK | CI95 (sign-flip) | 2-sided p | Both hit | Both miss | Rule hit/Random miss | Rule miss/Random hit | McNemar |
-|---|---|---|---|---|---|---|---|---|
+| Rule | Mean ΔK | Null-randomization interval* | Bootstrap 95% CI (ΔK)† | 2-sided p (sign-flip) | Both hit | Both miss | Rule hit/Random miss | Rule miss/Random hit | McNemar |
+|---|---|---|---|---|---|---|---|---|---|
 ${pairedRows}
 
-CI/p-value từ deterministic seeded sign-flip permutation (10,000 lần lặp, seed cố định theo rule — không dùng \`Math.random\`). McNemar exact chỉ tính khi số sự kiện discordant ≥ 6; dưới ngưỡng đó được ghi \`INSUFFICIENT_DISCORDANT_EVENTS\` thay vì ép ra một p-value không đáng tin.
+\\* **Null-randomization interval — KHÔNG PHẢI confidence interval.** Đây là percentile 2.5/97.5 của phân phối sign-flip DƯỚI GIẢ THUYẾT NULL (rule và RANDOM18 hoán đổi được cho nhau) — nó mô tả hành vi của null, không phải sampling distribution của ước lượng, nên không có valid coverage cho ΔK thật. Dùng cột kế bên để đọc uncertainty của hiệu ứng.
+
+† **Bootstrap 95% CI — CÓ valid coverage (xấp xỉ).** Resample 10.000 lần CÓ HOÀN LẠI trên chính n cặp quan sát (K_rule, K_random), lấy percentile 2.5/97.5 của phân phối mean ΔK resample được. Đây mới là khoảng ước lượng nên dùng khi diễn giải độ bất định của hiệu ứng thật.
+
+Sign-flip p-value và bootstrap CI đều dùng deterministic seeded RNG (không dùng \`Math.random\`), nhưng từ hai stream/seed khác nhau (bootstrap dùng \`combineSeed\` với salt riêng) — hai thủ tục resampling độc lập, không phải cùng một code path đội lốt hai tên. McNemar exact chỉ tính khi số sự kiện discordant ≥ 6; dưới ngưỡng đó được ghi \`INSUFFICIENT_DISCORDANT_EVENTS\` thay vì ép ra một p-value không đáng tin.
 
 ---
 
@@ -632,7 +720,19 @@ Protocol A tồn tại chính xác để minh họa mức độ khủng khiếp 
 
 ## K. Anti-Leak Evidence
 
-5 anti-leak test bắt buộc (§13) đều PASS — chạy trực tiếp trên harness này (không phải trên dữ liệu giả định):
+**Đây KHÔNG phải một khẳng định chữ suông.** CLI này đã tự spawn file test làm child process NGAY TRONG LẦN CHẠY SINH RA ARTIFACT NÀY, và đã fail-closed (từ chối ghi artifact) nếu tiến trình đó không exit 0. Bằng chứng cụ thể của chính lần chạy này:
+
+| | |
+|---|---|
+| Test file | \`${antiLeakEvidence.testFile}\` |
+| Test file SHA-256 (tại thời điểm chạy) | \`${antiLeakEvidence.testFileSha256}\` |
+| Command | \`${antiLeakEvidence.command}\` |
+| Exit code | ${antiLeakEvidence.exitCode} |
+| Pass count | ${antiLeakEvidence.passCount ?? "?"} |
+| Fail count | ${antiLeakEvidence.failCount ?? "?"} |
+| Verified at | ${antiLeakEvidence.verifiedAt} |
+
+Trong đó có 5 anti-leak test bắt buộc (§13):
 
 1. **Protocol A sanity** — 100% hit6 trên toàn bộ kỳ đánh giá thật.
 2. **Target mutation** — đổi \`draws[t].result\`, pool tại t (mọi rule) không đổi.
@@ -640,7 +740,7 @@ Protocol A tồn tại chính xác để minh họa mức độ khủng khiếp 
 4. **Replay-prefix invariance** — truncate dataset tại t+1, pool tại t giống hệt full dataset.
 5. **Determinism** — cùng input luôn cho cùng pool.
 
-Cộng thêm: proof-by-test cho công thức closed-form \`N_j(m)\` khớp chính xác brute-force enumerate toàn bộ 18.564 vé (§29). Chạy: \`node --import=tsx --test lib/research/bao18-walkforward.test.ts\`.
+Cộng thêm: proof-by-test cho công thức closed-form \`N_j(m)\` khớp chính xác brute-force enumerate toàn bộ 18.564 vé (§29). Muốn tái xác minh độc lập với hash trên: \`node --import=tsx --test lib/research/bao18-walkforward.test.ts\` rồi so khớp SHA-256 của chính file test với giá trị ghi ở trên.
 
 ---
 
@@ -650,6 +750,12 @@ Cộng thêm: proof-by-test cho công thức closed-form \`N_j(m)\` khớp chín
 - P(quan sát đúng 0 hit6 | null đúng) = **${nullProbZeroHits.toFixed(4)}**.
 - 95% predictive interval cho số lần hit6 dưới null: **[${nullPredictiveInterval95[0]}, ${nullPredictiveInterval95[1]}]**.
 - ${underpowered ? "Kỳ vọng null nhỏ hơn 5 — dataset hiện tại (chỉ 1 draw/kỳ, ~1471 kỳ đánh giá) có thể quá ngắn để phân biệt một lift vừa phải khỏi nhiễu thống kê của biến cố hiếm. Một rate quan sát cao hơn null không tự động là bằng chứng đủ mạnh." : "Kỳ vọng null đủ lớn để có power thống kê hợp lý cho một lift vừa-lớn, nhưng biến cố hit6 vẫn hiếm — luôn đọc CI/Holm-p trước khi kết luận."}
+
+**\`NO_EDGE\` ở đây nghĩa chính xác là \`NO_EVIDENCE_OF_EDGE\`, KHÔNG PHẢI \`EVIDENCE_OF_NO_EDGE\` — hai claim này KHÁC NHAU và việc gộp chúng lại là một lỗi thống kê kinh điển:**
+
+- \`NO_EVIDENCE_OF_EDGE\` (đúng với kết quả hiện tại): chúng ta KHÔNG tìm thấy lift có ý nghĩa thống kê — nhưng test này có thể **thiếu power** để phát hiện một lift vừa phải nếu nó thực sự tồn tại. Với E[null hit6] ≈ ${nullExpectedCount.toFixed(2)} trên ${range.evaluatedCount} kỳ (biến cố CỰC HIẾM), power để phát hiện một lift vừa-nhỏ là rất thấp — "không thấy" ở đây gần với "không đủ dữ liệu để thấy" hơn là "chắc chắn không có gì để thấy".
+- \`EVIDENCE_OF_NO_EDGE\` (KHÔNG phải kết luận ở đây, và audit này không có đủ power để đưa ra kết luận đó): sẽ đòi hỏi một thiết kế có power cao — ví dụ pre-registered equivalence test với biên hợp lý (TOST) hoặc CI đủ hẹp để loại trừ mọi lift "đáng quan tâm" — chứ không chỉ đơn thuần "p-value không có ý nghĩa". Chúng ta CHƯA làm điều đó ở đây.
+- Nói cách khác: "absence of evidence is not evidence of absence" — kết quả NO_EDGE hiện tại là một tuyên bố khiêm tốn ("chưa chứng minh được edge"), không phải một tuyên bố mạnh ("đã chứng minh không có edge"). Bootstrap CI ở §G cho một cách đọc trực tiếp độ rộng bất định của ΔK — nếu CI đó rộng và chứa cả những giá trị lift "đáng chú ý", đó chính là dấu hiệu underpowered, không phải bằng chứng null.
 - Đây là dữ liệu **hồi cứu** (retrospective) — Protocol B walk-forward loại được look-ahead trong CÁCH XÂY POOL, nhưng KHÔNG chứng minh rule chưa từng được ai nhìn thấy trước khi các kỳ này xảy ra. Retrospective significance ≠ live predictive edge.
 - Giá trị Jackpot thực tế thay đổi theo doanh số bán vé và số người trúng chia sẻ — không giả định cố định; EV ở đây chỉ tính giải cố định.
 - Giả định luật chia thưởng/tax hiện tại của Vietlott không thay đổi trong giai đoạn dữ liệu.

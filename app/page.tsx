@@ -8,6 +8,9 @@ import { PortfolioLab } from "@/components/portfolio-lab";
 import { DataStatus } from "@/components/data-status";
 import { DataExplorer } from "@/components/data-explorer";
 import { ExperimentScorecard } from "@/components/experiment-scorecard";
+import { ScientificVerdict } from "@/components/scientific-verdict";
+import { Bao18Panel } from "@/components/bao18-panel";
+import { CapabilityInspector } from "@/components/capability-inspector";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -153,6 +156,8 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           {WINDOWS.map((window) => <Button key={window.id} aria-pressed={windowId === window.id} className={windowId === window.id ? "window-active" : ""} size="sm" variant="ghost" onClick={() => setWindowId(window.id)}>{window.label}</Button>)}
         </div>
 
+        <ScientificVerdict protocolLock={protocolLock} />
+
         <DataStatus state={dataState} protocolLock={protocolLock} familySummary={familySummary} />
 
         <div className="metrics-grid">
@@ -237,6 +242,10 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
         </section>
 
         <ExperimentScorecard protocolLock={protocolLock} familySummary={familySummary} draws={draws} />
+
+        <Bao18Panel />
+
+        <CapabilityInspector protocolLock={protocolLock} familySummary={familySummary} />
 
         <DataExplorer draws={draws} />
 

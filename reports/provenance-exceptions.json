@@ -1,0 +1,26 @@
+[
+  {
+    "kind": "ARTIFACT_PROTOCOL_HASH_MISMATCH",
+    "experimentId": "protocol-2026-09-10.1-primary-strategies-hot-8e26f348",
+    "detail": "Artifact của \"protocol-2026-09-10.1-primary-strategies-hot-8e26f348\" có protocolHash 9b864bec07e3… nhưng registry ghi 089e16b90b1d….",
+    "justification": "Root cause found and fixed in Round 4: scripts/run-experiment.ts used to rebuild and overwrite EVERY strategy's artifact file on EVERY run using CURRENT_PROTOCOL's then-current hash, even for experimentIds already frozen in the append-only registry. This experiment was registered on 2026-09-11T18:06:36Z under protocolHash 089e16b90b1d... (now documented in reports/protocol-history.json); a later run (after CURRENT_PROTOCOL's content changed, still under the same unbumped version string 2026-09-10.1) silently overwrote its artifact with the new hash 9b864bec07e3.... Both the registry line and the artifact file are independently append-only/immutable by this project's own rules, so neither is rewritten to hide this — this exception documents the disagreement honestly instead. The fix (run-experiment.ts now only ever writes an artifact the first time its experimentId is registered, refusing to touch it again) has been verified live: re-running npm run research:experiment now correctly no-ops for all 3 of these ids and leaves their artifact files byte-identical.",
+    "discoveredAt": "2026-09-13T07:10:00.000Z",
+    "rootCauseFixed": true
+  },
+  {
+    "kind": "ARTIFACT_PROTOCOL_HASH_MISMATCH",
+    "experimentId": "protocol-2026-09-10.1-primary-strategies-cold-8e26f348",
+    "detail": "Artifact của \"protocol-2026-09-10.1-primary-strategies-cold-8e26f348\" có protocolHash 9b864bec07e3… nhưng registry ghi 089e16b90b1d….",
+    "justification": "Same root cause and fix as protocol-2026-09-10.1-primary-strategies-hot-8e26f348 — see that entry for the full explanation.",
+    "discoveredAt": "2026-09-13T07:10:00.000Z",
+    "rootCauseFixed": true
+  },
+  {
+    "kind": "ARTIFACT_PROTOCOL_HASH_MISMATCH",
+    "experimentId": "protocol-2026-09-10.1-primary-strategies-balanced-8e26f348",
+    "detail": "Artifact của \"protocol-2026-09-10.1-primary-strategies-balanced-8e26f348\" có protocolHash 9b864bec07e3… nhưng registry ghi 089e16b90b1d….",
+    "justification": "Same root cause and fix as protocol-2026-09-10.1-primary-strategies-hot-8e26f348 — see that entry for the full explanation.",
+    "discoveredAt": "2026-09-13T07:10:00.000Z",
+    "rootCauseFixed": true
+  }
+]

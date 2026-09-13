@@ -25,5 +25,7 @@ jobs:
         run: npm test
       - name: Data check
         run: npm run data:check
+      - name: Verify provenance chain
+        run: npm run research:verify-provenance
       - name: Build
         run: npm run build

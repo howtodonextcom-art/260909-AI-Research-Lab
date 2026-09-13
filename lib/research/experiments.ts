@@ -278,6 +278,63 @@ export type ExperimentArtifact = {
   runtime: { startedAt: string; finishedAt: string; durationMs: number };
 };
 
+/**
+ * Fail-closed shape validation for a parsed `reports/experiments/*.json`
+ * artifact file (§Provenance audit, Round 4) — mirrors
+ * `describeExperimentRecordProblem`'s registry-line validation above, so
+ * `scripts/verify-provenance.ts` never trusts a field on an artifact whose
+ * basic shape it hasn't checked. Deliberately not exhaustive on every nested
+ * field (temporalSplit/statistics/controls/runtime internals) — only what
+ * `checkRegistryArtifactConsistency` (lib/research/provenance-registry.ts)
+ * and the collision/filename checks actually read.
+ */
+function describeExperimentArtifactProblem(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return `artifact không phải object (${Array.isArray(value) ? "array" : typeof value})`;
+  }
+  const row = value as Record<string, unknown>;
+  if (typeof row.experimentId !== "string" || row.experimentId.length === 0) {
+    return "thiếu experimentId hoặc experimentId rỗng";
+  }
+  if (row.gitCommit !== null && typeof row.gitCommit !== "string") {
+    return `gitCommit phải là chuỗi hoặc null: ${JSON.stringify(row.gitCommit)}`;
+  }
+  if (typeof row.datasetSha256 !== "string" || row.datasetSha256.length === 0) {
+    return "thiếu datasetSha256";
+  }
+  if (typeof row.protocolVersion !== "string" || row.protocolVersion.length === 0) {
+    return "thiếu protocolVersion";
+  }
+  if (typeof row.protocolHash !== "string" || row.protocolHash.length === 0) {
+    return "thiếu protocolHash";
+  }
+  if (!row.strategy || typeof row.strategy !== "object" || Array.isArray(row.strategy)) {
+    return "thiếu strategy";
+  }
+  const strategy = row.strategy as Record<string, unknown>;
+  if (typeof strategy.id !== "string" || strategy.id.length === 0) return "thiếu strategy.id";
+  if (typeof row.seed !== "number" || !Number.isFinite(row.seed)) {
+    return `seed phải là số hữu hạn: ${JSON.stringify(row.seed)}`;
+  }
+  if (!row.temporalSplit || typeof row.temporalSplit !== "object") return "thiếu temporalSplit";
+  if (!row.metrics || typeof row.metrics !== "object") return "thiếu metrics";
+  if (!row.statistics || typeof row.statistics !== "object") return "thiếu statistics";
+  if (!row.controls || typeof row.controls !== "object") return "thiếu controls";
+  if (!row.runtime || typeof row.runtime !== "object") return "thiếu runtime";
+  return null;
+}
+
+/** `null` on any shape violation — callers must treat that as "cannot trust this file", never as "empty/default". */
+export function parseExperimentArtifact(value: unknown): ExperimentArtifact | null {
+  if (describeExperimentArtifactProblem(value)) return null;
+  return value as ExperimentArtifact;
+}
+
+/** Same check as `parseExperimentArtifact`, but returns the Vietnamese reason instead of discarding it — for CLI error messages. */
+export function describeExperimentArtifactShapeProblem(value: unknown): string | null {
+  return describeExperimentArtifactProblem(value);
+}
+
 function phaseOf(report: TemporalBacktestReport, phaseId: "DEVELOPMENT" | "VALIDATION" | "TEST") {
   return report.phases.find((phase) => phase.id === phaseId) ?? null;
 }

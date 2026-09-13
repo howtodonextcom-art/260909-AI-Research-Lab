@@ -11,8 +11,10 @@ import {
   binomialTailAtLeast,
   buildPool18,
   buildProtocolAPool,
+  canonicalScientificSpecJson,
   clopperPearsonCI,
   combineSeed,
+  computeScientificSpecHash,
   evaluationRange,
   exactMatchTierCount,
   exactMcNemar,
@@ -20,12 +22,15 @@ import {
   hypergeometricExpectedK,
   hypergeometricPmf,
   intersectionCount,
+  pairedBootstrapCI,
   pairedSignFlipTest,
   poolForTarget,
   poolHit6,
   runProtocolA,
   runRuleWalkForward,
+  type Bao18NonRandomRule,
   type Bao18Rule,
+  type Bao18ScientificSpec,
 } from "./bao18-walkforward";
 
 // ---------------------------------------------------------------------------
@@ -291,6 +296,63 @@ test("pairedSignFlipTest: deterministic với cùng seed, và mean=0 khi mọi d
   assert.equal(zeroResult.meanDelta, 0);
 });
 
+test("pairedSignFlipTest: trường CI đã đổi tên rõ ràng KHÔNG PHẢI CI thật (nullRandomizationLower/Upper, không phải ciLower/ciUpper)", () => {
+  const deltas = [1, -1, 2, -2, 0.5, -0.5, 3, -3];
+  const result = pairedSignFlipTest(deltas, SEED, 2000);
+  assert.ok("nullRandomizationLower" in result, "phải có field nullRandomizationLower");
+  assert.ok("nullRandomizationUpper" in result, "phải có field nullRandomizationUpper");
+  assert.ok(!("ciLower" in result), "KHÔNG được còn field ciLower gây hiểu lầm");
+  assert.ok(!("ciUpper" in result), "KHÔNG được còn field ciUpper gây hiểu lầm");
+  assert.ok(result.nullRandomizationLower <= result.nullRandomizationUpper);
+});
+
+// ---------------------------------------------------------------------------
+// pairedBootstrapCI — a GENUINELY valid CI (paired/case bootstrap), distinct
+// from the sign-flip null-randomization interval above.
+// ---------------------------------------------------------------------------
+test("pairedBootstrapCI: deterministic với cùng seed + data", () => {
+  const deltas = [1, -1, 2, -2, 0.5, -0.5, 3, -3, 1.5, -1.5];
+  const a = pairedBootstrapCI(deltas, SEED, 5000);
+  const b = pairedBootstrapCI(deltas, SEED, 5000);
+  assert.deepEqual(a, b);
+});
+
+test("pairedBootstrapCI: mọi delta bằng nhau (zero-variance) thì CI suy biến về đúng điểm đó", () => {
+  const deltas = Array.from({ length: 20 }, () => 2.5);
+  const result = pairedBootstrapCI(deltas, SEED, 3000);
+  assert.equal(result.lower, 2.5);
+  assert.equal(result.upper, 2.5);
+});
+
+test("pairedBootstrapCI và pairedSignFlipTest.nullRandomizationInterval là hai thủ tục resampling THỰC SỰ khác nhau (không phải cùng code path đội lốt hai tên)", () => {
+  // Construct deltas with a real, non-zero mean shift (all values shifted
+  // well away from 0) so the two procedures' outputs are clearly
+  // distinguishable: the null-randomization interval (built from randomly
+  // SIGN-FLIPPED deltas) is forced toward symmetry around 0 by construction,
+  // while the bootstrap CI (built by resampling the ACTUAL observed deltas,
+  // never flipping their sign) stays centered near the true observed mean.
+  const deltas = Array.from({ length: 40 }, (_, i) => 5 + (i % 5) * 0.1);
+  const observedMean = deltas.reduce((s, d) => s + d, 0) / deltas.length;
+  assert.ok(observedMean > 4.9, "sanity: mean phải lớn, khác 0 rõ rệt");
+
+  const signFlip = pairedSignFlipTest(deltas, SEED, 8000);
+  const bootstrap = pairedBootstrapCI(deltas, SEED, 8000);
+
+  // Null-randomization interval is pulled toward 0 (sign-flipping erases the
+  // true shift), while the bootstrap CI stays near the true observed mean —
+  // proving these are computed from genuinely different resampling schemes.
+  assert.ok(
+    Math.abs(signFlip.nullRandomizationLower) < observedMean / 2,
+    "null-randomization interval phải bị kéo về gần 0 do sign-flip xóa shift thật",
+  );
+  assert.ok(
+    bootstrap.lower > observedMean / 2,
+    "bootstrap CI phải nằm gần mean quan sát thật, không bị kéo về 0",
+  );
+  assert.notEqual(signFlip.nullRandomizationLower, bootstrap.lower);
+  assert.notEqual(signFlip.nullRandomizationUpper, bootstrap.upper);
+});
+
 // ---------------------------------------------------------------------------
 // Misc — poolHit6/intersectionCount, combineSeed, evaluationRange
 // ---------------------------------------------------------------------------
@@ -340,4 +402,103 @@ test("mọi rule không phải RANDOM18 phải nằm trong BAO18_RULES (không r
   assert.ok(declared.has("BALANCED18"));
   assert.ok(declared.has("RANDOM18"));
   assert.equal(BAO18_RULES.length, 5);
+});
+
+// ---------------------------------------------------------------------------
+// Scientific identity vs build provenance — the single most important test
+// in this file (§26 pattern). A build/commit change alone (gitHead, branch,
+// timestamp) must NEVER change what counts as "the same experiment"; only a
+// genuine research-defining input may. This exercises the REAL exported
+// `computeScientificSpecHash`, not a reimplementation.
+// ---------------------------------------------------------------------------
+function makeScientificSpec(overrides: Partial<Bao18ScientificSpec> = {}): Bao18ScientificSpec {
+  const rules: Bao18Rule[] = ["RANDOM18", "HOT18", "COLD18", "OVERDUE18", "BALANCED18"];
+  const holmFamily: Bao18NonRandomRule[] = ["HOT18", "COLD18", "OVERDUE18", "BALANCED18"];
+  return {
+    experiment: "bao18-walkforward-reverse-audit",
+    version: "2.0",
+    datasetSha256: "abc123",
+    lookback: 90,
+    seed: 645,
+    rules,
+    primaryEndpoint: "poolHit6",
+    null: "C(18,6)/C(45,6)",
+    alpha: 0.05,
+    holmFamily,
+    ...overrides,
+  };
+}
+
+test("§26: scientificSpecHash KHÔNG đổi khi chỉ build-provenance (gitHead/timestamp) đổi — vì chúng không phải field của Bao18ScientificSpec", async () => {
+  // `Bao18ScientificSpec` structurally has no `gitHead`/`generatedAt` field at
+  // all, so the strongest way to prove the invariant is to show that two
+  // specs with every genuine research input held identical, constructed at
+  // two different simulated "times" (i.e. computed independently, as two
+  // separate CLI runs on two different commits would), hash identically.
+  const specRun1 = makeScientificSpec();
+  const specRun2 = makeScientificSpec(); // simulates a second run after a new commit + later timestamp
+  const hash1 = await computeScientificSpecHash(specRun1);
+  const hash2 = await computeScientificSpecHash(specRun2);
+  assert.equal(hash1, hash2, "hai spec với cùng research input phải cho cùng hash bất kể build/commit/thời điểm chạy");
+
+  // Sanity: canonical JSON also matches (proves it's the same underlying
+  // canonicalization, not coincidentally-equal hashes).
+  assert.equal(canonicalScientificSpecJson(specRun1), canonicalScientificSpecJson(specRun2));
+});
+
+test("§26: scientificSpecHash THAY ĐỔI khi một research input thật (lookback) thay đổi", async () => {
+  const baseline = makeScientificSpec({ lookback: 90 });
+  const changedLookback = makeScientificSpec({ lookback: 120 });
+  const hashBaseline = await computeScientificSpecHash(baseline);
+  const hashChanged = await computeScientificSpecHash(changedLookback);
+  assert.notEqual(hashBaseline, hashChanged, "đổi lookback (research input thật) phải làm đổi hash");
+});
+
+test("§26: scientificSpecHash THAY ĐỔI khi datasetSha256 thay đổi (dữ liệu khác = thí nghiệm khác)", async () => {
+  const baseline = makeScientificSpec({ datasetSha256: "hash-A" });
+  const changed = makeScientificSpec({ datasetSha256: "hash-B" });
+  const hashBaseline = await computeScientificSpecHash(baseline);
+  const hashChanged = await computeScientificSpecHash(changed);
+  assert.notEqual(hashBaseline, hashChanged);
+});
+
+test("§26: canonicalScientificSpecJson không phụ thuộc thứ tự khai báo field (sorted-key canonicalization)", () => {
+  const a = { experiment: "x", version: "1", datasetSha256: "d", lookback: 1, seed: 1, rules: ["RANDOM18"] as Bao18Rule[], primaryEndpoint: "p", null: "n", alpha: 0.05, holmFamily: [] as Bao18NonRandomRule[] };
+  const b = { null: "n", alpha: 0.05, holmFamily: [] as Bao18NonRandomRule[], rules: ["RANDOM18"] as Bao18Rule[], seed: 1, lookback: 1, datasetSha256: "d", version: "1", experiment: "x", primaryEndpoint: "p" };
+  assert.equal(canonicalScientificSpecJson(a), canonicalScientificSpecJson(b), "thứ tự key khai báo trong object literal không được ảnh hưởng canonical JSON");
+});
+
+// ---------------------------------------------------------------------------
+// §5 adversarial re-verification — exact binomial / Clopper-Pearson at the
+// n=0 / x=0 / x=n boundaries (Sub-Agent B task item 5c). Nothing was found
+// broken by inspection or by these tests; they are added as a regression
+// lock on the boundary behavior that was checked by hand.
+// ---------------------------------------------------------------------------
+test("Biên adversarial: binomialTailAtLeast/binomialPmf/clopperPearsonCI tại n=0 không crash và cho kết quả hợp lý", () => {
+  assert.equal(binomialTailAtLeast(0, 0, 0.3), 1, "P(X>=0 | n=0) phải =1");
+  assert.equal(binomialPmf(0, 0, 0.3), 1, "P(X=0 | n=0) phải =1 với mọi p hợp lệ");
+  const ci = clopperPearsonCI(0, 0, 0.05);
+  assert.deepEqual(ci, { lower: 0, upper: 1 }, "n=0 thì CI phải phủ toàn bộ [0,1] — không có dữ liệu, không thu hẹp được gì");
+});
+
+test("Biên adversarial: clopperPearsonCI tại x=n (mọi quan sát đều hit) không crash và upper=1", () => {
+  const ci = clopperPearsonCI(5, 5, 0.05);
+  assert.equal(ci.upper, 1);
+  assert.ok(ci.lower > 0 && ci.lower < 1);
+});
+
+// ---------------------------------------------------------------------------
+// §5 adversarial re-verification — RANDOM18 seed derivation (combineSeed)
+// must not collide across the realistic targetIndex range, or two different
+// draws could silently receive the identical "independent" random pool.
+// Verified empirically over a range well beyond the real dataset's ~1471
+// evaluated draws; no collision found.
+// ---------------------------------------------------------------------------
+test("Biên adversarial: combineSeed(645, t) không va chạm với t=0..2000 (dataset thật chỉ có ~1471 kỳ đánh giá)", () => {
+  const seen = new Set<number>();
+  for (let t = 0; t < 2000; t += 1) {
+    const value = combineSeed(645, t);
+    assert.ok(!seen.has(value), `va chạm combineSeed tại targetIndex=${t}`);
+    seen.add(value);
+  }
 });

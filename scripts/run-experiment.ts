@@ -90,6 +90,27 @@ for (const strategy of strategies) {
   experimentIds.set(strategy, `${familyId}-${strategy.toLowerCase()}-${datasetHash.slice(0, 8)}`);
 }
 
+/**
+ * §Provenance audit (Round 4): a real bug found in production data — this
+ * script used to write an artifact for EVERY strategy on EVERY run,
+ * recomputing `protocolHash` fresh each time, even for an experimentId
+ * already frozen in the append-only registry. If `CURRENT_PROTOCOL` changed
+ * between two runs, the artifact would silently drift to the new hash while
+ * the registry line (correctly immutable) kept the original — the exact
+ * "registry and artifact disagree for the same experimentId" failure
+ * `verify-provenance.ts` is designed to catch. Concretely: this is how
+ * `protocol-2026-09-10.1-primary-strategies-{hot,cold,balanced}-8e26f348`'s
+ * artifacts ended up recording a different `protocolHash` than their own
+ * registry entries (documented in `reports/protocol-history.json` and
+ * `reports/provenance-exceptions.json` rather than silently patched).
+ *
+ * Fix: an artifact is written ONLY the first time its experimentId is
+ * registered. Once a registry line exists, the artifact for that id is
+ * immutable — re-running this script never touches it again, matching the
+ * registry's own append-only guarantee.
+ */
+const newlyRegisteredStrategies: string[] = [];
+
 // The one honestly-derivable "prediction" at registration time: what the
 // strategy actually outputs right now, given the full current dataset as its
 // lookback window — i.e. its pick for the draw immediately after
@@ -102,7 +123,7 @@ const latestDrawDate = snapshot.records.at(-1)?.date ?? null;
 for (const strategy of strategies) {
   const experimentId = experimentIds.get(strategy)!;
   if (registryHasExperiment(existing, experimentId)) {
-    console.log(`  Bỏ qua ${experimentId} (đã có trong registry)`);
+    console.log(`  Bỏ qua ${experimentId} (đã có trong registry — artifact giữ nguyên, không ghi đè)`);
     continue;
   }
   const prediction =
@@ -136,22 +157,35 @@ for (const strategy of strategies) {
   const completed = transitionExperiment(registered, "COMPLETED");
   await appendFile(registryPath, `${JSON.stringify(completed)}\n`, "utf8");
   existing.push(completed);
+  newlyRegisteredStrategies.push(strategy);
 }
 
-const artifacts = buildExperimentArtifactsFromReport({
-  report,
-  datasetSha256: datasetHash,
-  gitCommit: commit,
-  seed,
-  experimentIdFor: (strategy) => experimentIds.get(strategy)!,
-  runtime: { startedAt, finishedAt },
-  protocolHash,
-  protocolLock,
-  latestDrawId,
-});
+const artifacts = newlyRegisteredStrategies.length
+  ? buildExperimentArtifactsFromReport({
+      report,
+      datasetSha256: datasetHash,
+      gitCommit: commit,
+      seed,
+      experimentIdFor: (strategy) => experimentIds.get(strategy)!,
+      runtime: { startedAt, finishedAt },
+      protocolHash,
+      protocolLock,
+      latestDrawId,
+    }).filter((artifact) => newlyRegisteredStrategies.some((s) => experimentIds.get(s) === artifact.experimentId))
+  : [];
 
 for (const artifact of artifacts) {
-  await writeFile(path.join(experimentsDir, `${artifact.experimentId}.json`), `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  const artifactPath = path.join(experimentsDir, `${artifact.experimentId}.json`);
+  try {
+    await readFile(artifactPath, "utf8");
+    // Should be unreachable (we only build artifacts for newly-registered
+    // ids), but fail loudly rather than silently overwrite if it ever is.
+    console.error(`  TỪ CHỐI ghi đè artifact đã tồn tại: ${path.relative(projectRoot, artifactPath)}`);
+    process.exit(1);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
 }
 
 const familySummary = buildExperimentFamilySummary(existing, familyId);

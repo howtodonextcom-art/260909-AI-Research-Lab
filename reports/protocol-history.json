@@ -1,0 +1,16 @@
+[
+  {
+    "protocolHash": "089e16b90b1d168e69142faf678b5bc66e831310cf99b30c4f0db259c27badef",
+    "protocolVersion": "2026-09-10.1",
+    "recordedAt": "2026-09-11T18:06:36.655Z",
+    "source": "migrated-pre-lock-registry",
+    "note": "Reconstructed from reports/experiments/registry.jsonl evidence (Round 4 provenance audit), not from a live-written lock file — no reports/protocol-lock.json existed with this hash at the time it was recorded. This hash was the real CURRENT_PROTOCOL identity when the 3 protocol-2026-09-10.1-primary-strategies-{hot,cold,balanced}-8e26f348 experiments were registered (registeredAt 2026-09-11T18:06:36Z). CURRENT_PROTOCOL's content changed afterward without protocolVersion being bumped, producing a second hash (9b864bec07e3...) under the SAME version string \"2026-09-10.1\" — itself a documented gap (protocol content changed without a corresponding version bump); this history file is what makes both identities distinguishable and auditable going forward instead of silently colliding under one version label."
+  },
+  {
+    "protocolHash": "9b864bec07e355e042029cff3553716ba454e89b01d0860773ea47de772dfe52",
+    "protocolVersion": "2026-09-10.1",
+    "recordedAt": "2026-09-12T16:49:27.194Z",
+    "source": "migrated-existing-lock",
+    "note": "This is reports/protocol-lock.json's protocolLockedAt at the time protocol-history.json was introduced (Round 4) — the lock file already existed before history-tracking was added, so this entry preserves that it was the first LIVE-recorded lock rather than letting its origin be silently forgotten."
+  }
+]

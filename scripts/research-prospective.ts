@@ -26,17 +26,21 @@
  *                          is nothing due yet — that is the normal state
  *                          today, not an error.
  */
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStrategyPick } from "../lib/analytics";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
 import { formatBall } from "../lib/mega645";
 import {
-  appendProspectiveResult,
+  buildFrozenEvent,
+  buildScoredEvent,
+  deriveProspectiveStatus,
+  foldProspectiveLedger,
   freezeProspectivePrediction,
   hasFrozenEntry,
-  parseProspectiveScorecard,
+  lastChainHash,
+  parseProspectiveLedger,
   type ProspectiveEntry,
 } from "../lib/research/prospective";
 import { CURRENT_PROTOCOL, computeProtocolHash, nextDrawId, parseProtocolLock } from "../lib/research/protocol";
@@ -55,20 +59,21 @@ async function readTextIfPresent(filePath: string): Promise<string> {
   }
 }
 
-async function loadScorecard(): Promise<ProspectiveEntry[]> {
+/**
+ * Reads and parses the ledger (legacy full-entry lines plus, from this
+ * feature onward, chained FROZEN/SCORED event lines — see
+ * `lib/research/prospective.ts`'s header comment on the hash chain). Exits
+ * fail-closed on any malformed line, exactly like the old whole-array
+ * loader this replaces.
+ */
+async function loadLedger() {
   const text = await readTextIfPresent(scorecardPath);
-  const { entries, issues } = parseProspectiveScorecard(text);
+  const { lines, issues } = parseProspectiveLedger(text);
   if (issues.length) {
     console.error(`Scorecard hỏng: ${issues.length} dòng lỗi. Ví dụ (dòng ${issues[0].line}): ${issues[0].reason}`);
     process.exit(1);
   }
-  return entries;
-}
-
-async function writeScorecard(entries: ProspectiveEntry[]): Promise<void> {
-  await mkdir(path.dirname(scorecardPath), { recursive: true });
-  const body = entries.map((entry) => JSON.stringify(entry)).join("\n");
-  await writeFile(scorecardPath, body.length ? `${body}\n` : "", "utf8");
+  return lines;
 }
 
 async function cmdFreeze(requestedDrawId: string): Promise<void> {
@@ -105,12 +110,19 @@ async function cmdFreeze(requestedDrawId: string): Promise<void> {
     process.exit(1);
   }
 
-  const existing = await loadScorecard();
+  const ledgerLines = await loadLedger();
+  const existing = deriveProspectiveStatus(ledgerLines);
   const protocolHash = await computeProtocolHash(CURRENT_PROTOCOL);
   const datasetHashAtFreeze = snapshot.manifest.datasetSha256;
   const window = snapshot.records.slice(-CURRENT_PROTOCOL.lookback);
 
+  // The whole file's hash chain is one sequence across FROZEN and SCORED
+  // events alike (append order), so each new FrozenEvent must link off the
+  // last chained line currently on disk — and, within this one run, off the
+  // FrozenEvent just built for the previous strategy in the loop below.
+  let previousEntryHash = lastChainHash(ledgerLines);
   const frozen: ProspectiveEntry[] = [];
+  const frozenLines: string[] = [];
   for (const strategyId of CURRENT_PROTOCOL.strategies as Array<ProspectiveEntry["strategyId"]>) {
     if (hasFrozenEntry(existing, drawId, strategyId)) {
       console.log(`  Bỏ qua ${drawId}/${strategyId} (đã đóng băng trước đó)`);
@@ -130,7 +142,10 @@ async function cmdFreeze(requestedDrawId: string): Promise<void> {
       console.error(`Từ chối đóng băng ${drawId}/${strategyId}: ${result.reason}`);
       process.exit(1);
     }
+    const event = buildFrozenEvent(result.entry, previousEntryHash);
+    previousEntryHash = event.entryHash;
     frozen.push(result.entry);
+    frozenLines.push(JSON.stringify(event));
   }
 
   if (!frozen.length) {
@@ -138,9 +153,10 @@ async function cmdFreeze(requestedDrawId: string): Promise<void> {
     return;
   }
 
+  // Append-only: new chained FrozenEvent lines added to the end of the
+  // file. Existing lines (legacy or chained) are never touched.
   await mkdir(path.dirname(scorecardPath), { recursive: true });
-  const lines = `${frozen.map((entry) => JSON.stringify(entry)).join("\n")}\n`;
-  await appendFile(scorecardPath, lines, "utf8");
+  await appendFile(scorecardPath, `${frozenLines.join("\n")}\n`, "utf8");
 
   console.log(`\nĐÃ ĐÓNG BĂNG ${frozen.length} DỰ ĐOÁN CHO KỲ #${drawId} (PROSPECTIVE)`);
   console.log(`  protocolHash: ${protocolHash}`);
@@ -151,17 +167,32 @@ async function cmdFreeze(requestedDrawId: string): Promise<void> {
   console.log(`\n  Scorecard: ${path.relative(projectRoot, scorecardPath)}`);
 }
 
+/**
+ * Scores every still-PENDING entry whose draw now has a real result, by
+ * APPENDING one ScoredEvent per entry — never by rewriting the file to
+ * mutate the FrozenEvent/legacy line in place. That rewrite (`writeFile`
+ * over the whole array) was the concrete tamper-evidence gap this feature
+ * closes: a mutated line and a legitimately-scored line used to be
+ * byte-indistinguishable after the fact. Now the FrozenEvent's bytes are
+ * never touched again; "SCORED" is a fact derived by folding a later,
+ * separately-hash-chained ScoredEvent on top of it.
+ */
 async function cmdAppendResult(): Promise<void> {
   const snapshot = await loadSnapshot(paths);
-  const existing = await loadScorecard();
-  if (!existing.length) {
+  const ledgerLines = await loadLedger();
+  if (!ledgerLines.length) {
     console.log("Scorecard rỗng — chưa có dự đoán nào được đóng băng. Không có gì để làm.");
     return;
   }
 
-  const dueDrawIds = new Set(
-    existing.filter((entry) => entry.result === null).map((entry) => entry.drawId),
-  );
+  const folded = foldProspectiveLedger(ledgerLines);
+  const pending = folded.filter((entry) => entry.result === null);
+  if (!pending.length) {
+    console.log("Không có entry nào đang PENDING (mọi entry đã được chấm điểm). Không có gì để làm.");
+    return;
+  }
+
+  const dueDrawIds = new Set(pending.map((entry) => entry.drawId));
   const resultsByDrawId = new Map(snapshot.records.filter((r) => dueDrawIds.has(r.id)).map((r) => [r.id, r.result]));
 
   if (!resultsByDrawId.size) {
@@ -169,21 +200,43 @@ async function cmdAppendResult(): Promise<void> {
     return;
   }
 
-  let updated = existing;
-  for (const [drawId, result] of resultsByDrawId) {
-    updated = appendProspectiveResult(updated, { drawId, result });
+  let previousEntryHash = lastChainHash(ledgerLines);
+  const scoredLines: string[] = [];
+  const scoredNow: Array<{ drawId: string; strategyId: ProspectiveEntry["strategyId"]; matches: number; tier: string }> = [];
+
+  for (const entry of pending) {
+    const result = resultsByDrawId.get(entry.drawId);
+    if (!result) continue;
+    const event = buildScoredEvent(
+      {
+        entryId: entry.entryId,
+        drawId: entry.drawId,
+        strategyId: entry.strategyId,
+        prediction: entry.prediction,
+        result,
+        scoredAt: new Date().toISOString(),
+      },
+      previousEntryHash,
+    );
+    previousEntryHash = event.entryHash;
+    scoredLines.push(JSON.stringify(event));
+    scoredNow.push({ drawId: entry.drawId, strategyId: entry.strategyId, matches: event.matches, tier: event.tier });
   }
 
-  await writeScorecard(updated);
+  if (!scoredLines.length) {
+    console.log("Không có entry PENDING nào khớp kỳ đến hạn. Không có gì để làm.");
+    return;
+  }
 
-  const scoredNow = updated.filter(
-    (entry, index) => entry.result !== null && existing[index]?.result === null,
-  );
-  console.log(`\nĐÃ GHI KẾT QUẢ CHO ${resultsByDrawId.size} KỲ (${scoredNow.length} bản ghi cập nhật)`);
-  for (const [drawId] of resultsByDrawId) {
-    for (const entry of updated.filter((e) => e.drawId === drawId)) {
-      console.log(`  #${drawId} ${entry.strategyId.padEnd(10)} matches=${entry.matches} tier=${entry.tier}`);
-    }
+  // Append-only: new chained ScoredEvent lines added to the end of the
+  // file. Every existing line — legacy or chained, frozen or already
+  // scored — is byte-for-byte untouched.
+  await mkdir(path.dirname(scorecardPath), { recursive: true });
+  await appendFile(scorecardPath, `${scoredLines.join("\n")}\n`, "utf8");
+
+  console.log(`\nĐÃ GHI KẾT QUẢ CHO ${scoredNow.length} BẢN GHI (append-only — không sửa dòng cũ)`);
+  for (const entry of scoredNow) {
+    console.log(`  #${entry.drawId} ${entry.strategyId.padEnd(10)} matches=${entry.matches} tier=${entry.tier}`);
   }
   console.log(`\n  Scorecard: ${path.relative(projectRoot, scorecardPath)}`);
 }

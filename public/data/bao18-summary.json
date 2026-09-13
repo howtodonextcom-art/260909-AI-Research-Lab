@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-13T06:59:17.606Z",
+  "sourceReportFile": "26-09-13-13-59-bao18-walkforward-reverse-audit.json",
+  "datasetRecordCount": 1561,
+  "firstDrawId": "00001",
+  "latestDrawId": "01561",
+  "math": {
+    "totalCombinations": 8145060,
+    "bao18Tickets": 18564,
+    "ticketPrice": 10000,
+    "bao18CostPerDraw": 185640000,
+    "nullJackpotProbability": 0.0022791728974372195
+  },
+  "protocolA": {
+    "evaluatedDraws": 1471,
+    "hit6Count": 1471,
+    "hit6Rate": 1,
+    "sourceVerdict": "INVALID_PEEK_ONLY"
+  },
+  "protocolB": {
+    "evaluatedCount": 1471,
+    "rules": [
+      {
+        "rule": "RANDOM18",
+        "isBaseline": true,
+        "n": 1471,
+        "hit6Count": 4,
+        "hit6Rate": 0.002719238613188307,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.43135486845168364,
+        "adjustedPValue": null,
+        "meanIntersection": 2.388851121685928,
+        "hit4PlusRate": 0.16043507817811012,
+        "hit5PlusRate": 0.027192386131883073,
+        "verdict": null,
+        "reasons": []
+      },
+      {
+        "rule": "HOT18",
+        "isBaseline": false,
+        "n": 1471,
+        "hit6Count": 1,
+        "hit6Rate": 0.0006798096532970768,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.9651425990013032,
+        "adjustedPValue": 1,
+        "meanIntersection": 2.403806934058464,
+        "hit4PlusRate": 0.15159755268524813,
+        "hit5PlusRate": 0.02379333786539769,
+        "verdict": "NO_EDGE",
+        "reasons": [
+          "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
+          "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
+        ]
+      },
+      {
+        "rule": "COLD18",
+        "isBaseline": false,
+        "n": 1471,
+        "hit6Count": 4,
+        "hit6Rate": 0.002719238613188307,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.43135486845168364,
+        "adjustedPValue": 1,
+        "meanIntersection": 2.3942895989123048,
+        "hit4PlusRate": 0.1549966009517335,
+        "hit5PlusRate": 0.03263086335825969,
+        "verdict": "NO_EDGE",
+        "reasons": [
+          "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
+          "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
+        ]
+      },
+      {
+        "rule": "OVERDUE18",
+        "isBaseline": false,
+        "n": 1471,
+        "hit6Count": 2,
+        "hit6Rate": 0.0013596193065941536,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.8480105045223634,
+        "adjustedPValue": 1,
+        "meanIntersection": 2.365737593473827,
+        "hit4PlusRate": 0.15091774303195105,
+        "hit5PlusRate": 0.02787219578518015,
+        "verdict": "NO_EDGE",
+        "reasons": [
+          "không có lift dương so với null lý thuyết",
+          "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)"
+        ]
+      },
+      {
+        "rule": "BALANCED18",
+        "isBaseline": false,
+        "n": 1471,
+        "hit6Count": 3,
+        "hit6Rate": 0.0020394289598912306,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.6513435094971851,
+        "adjustedPValue": 1,
+        "meanIntersection": 2.4024473147518695,
+        "hit4PlusRate": 0.14683888511216858,
+        "hit5PlusRate": 0.02515295717199184,
+        "verdict": "NO_EDGE",
+        "reasons": [
+          "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
+          "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
+        ]
+      }
+    ]
+  },
+  "nullCalibration": {
+    "nullExpectedCount": 3.3526633321301498,
+    "nullProbZeroHits": 0.03485740099934049,
+    "nullPredictiveInterval95": [
+      0,
+      7
+    ],
+    "underpowered": true
+  },
+  "finalVerdict": "NO_EDGE",
+  "scientificGrade": "C — NO DEMONSTRATED EDGE"
+}

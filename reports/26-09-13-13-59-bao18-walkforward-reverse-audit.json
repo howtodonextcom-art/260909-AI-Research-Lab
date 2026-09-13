@@ -1,0 +1,482 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-13T06:59:17.606Z",
+  "buildProvenance": {
+    "gitHead": "4e800aa255e81e3eb5b8becbba60d8ca23089cf9",
+    "branch": "main",
+    "workingTreeStatus": "dirty",
+    "generatedAt": "2026-09-13T06:59:17.606Z",
+    "runtimeVersion": "v24.14.1"
+  },
+  "datasetSha256": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
+  "datasetRecordCount": 1561,
+  "firstDraw": {
+    "id": "00001",
+    "date": "2016-07-20"
+  },
+  "latestDraw": {
+    "id": "01561",
+    "date": "2026-09-11"
+  },
+  "lookback": 90,
+  "seed": 645,
+  "scientificSpecHash": "254bafef1c4ed187bd3e14e37ca5188dc01ba7bcf951db2359db62e1f81963be",
+  "math": {
+    "totalCombinations": 8145060,
+    "bao18Tickets": 18564,
+    "ticketPrice": 10000,
+    "bao18CostPerDraw": 185640000,
+    "nullJackpotProbability": 0.0022791728974372195
+  },
+  "protocolA": {
+    "evaluatedDraws": 1471,
+    "hit6Count": 1471,
+    "hit6Rate": 1,
+    "verdict": "INVALID_PEEK_ONLY"
+  },
+  "protocolB": {
+    "evaluationRange": {
+      "start": 90,
+      "end": 1560,
+      "evaluatedCount": 1471,
+      "skippedWarmup": 90
+    },
+    "perRule": {
+      "RANDOM18": {
+        "rule": "RANDOM18",
+        "n": 1471,
+        "hit6Count": 4,
+        "hit6Rate": 0.002719238613188307,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.43135486845168364,
+        "adjustedPValue": null,
+        "ci95": {
+          "lower": 0.0007413825819242595,
+          "upper": 0.0069475718527174345,
+          "method": "clopper-pearson"
+        },
+        "intersectionHistogram": {
+          "0": 43,
+          "1": 286,
+          "2": 478,
+          "3": 428,
+          "4": 196,
+          "5": 36,
+          "6": 4
+        },
+        "meanIntersection": 2.388851121685928,
+        "medianIntersection": 2,
+        "hit4PlusRate": 0.16043507817811012,
+        "hit5PlusRate": 0.027192386131883073,
+        "fixedPrizePayout": 36331080000,
+        "totalCost": 273076440000,
+        "fixedNet": -236745360000,
+        "costPerHit6": 68269110000,
+        "early": {
+          "n": 735,
+          "meanK": 2.3918367346938774,
+          "hit6Count": 3,
+          "hit6Rate": 0.004081632653061225,
+          "fixedPrizePayout": 19006050000
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.385869565217391,
+          "hit6Count": 1,
+          "hit6Rate": 0.001358695652173913,
+          "fixedPrizePayout": 17325030000
+        }
+      },
+      "HOT18": {
+        "rule": "HOT18",
+        "n": 1471,
+        "hit6Count": 1,
+        "hit6Rate": 0.0006798096532970768,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.9651425990013032,
+        "adjustedPValue": 1,
+        "ci95": {
+          "lower": 0.00001721114215464567,
+          "upper": 0.003781776471605271,
+          "method": "clopper-pearson"
+        },
+        "intersectionHistogram": {
+          "0": 51,
+          "1": 264,
+          "2": 455,
+          "3": 478,
+          "4": 188,
+          "5": 34,
+          "6": 1
+        },
+        "meanIntersection": 2.403806934058464,
+        "medianIntersection": 2,
+        "hit4PlusRate": 0.15159755268524813,
+        "hit5PlusRate": 0.02379333786539769,
+        "fixedPrizePayout": 32333140000,
+        "totalCost": 273076440000,
+        "fixedNet": -240743300000,
+        "costPerHit6": 273076440000,
+        "early": {
+          "n": 735,
+          "meanK": 2.4299319727891158,
+          "hit6Count": 1,
+          "hit6Rate": 0.0013605442176870747,
+          "fixedPrizePayout": 16683740000
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.3777173913043477,
+          "hit6Count": 0,
+          "hit6Rate": 0,
+          "fixedPrizePayout": 15649400000
+        }
+      },
+      "COLD18": {
+        "rule": "COLD18",
+        "n": 1471,
+        "hit6Count": 4,
+        "hit6Rate": 0.002719238613188307,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.43135486845168364,
+        "adjustedPValue": 1,
+        "ci95": {
+          "lower": 0.0007413825819242595,
+          "upper": 0.0069475718527174345,
+          "method": "clopper-pearson"
+        },
+        "intersectionHistogram": {
+          "0": 43,
+          "1": 259,
+          "2": 524,
+          "3": 417,
+          "4": 180,
+          "5": 44,
+          "6": 4
+        },
+        "meanIntersection": 2.3942895989123048,
+        "medianIntersection": 2,
+        "hit4PlusRate": 0.1549966009517335,
+        "hit5PlusRate": 0.03263086335825969,
+        "fixedPrizePayout": 37707650000,
+        "totalCost": 273076440000,
+        "fixedNet": -235368790000,
+        "costPerHit6": 68269110000,
+        "early": {
+          "n": 735,
+          "meanK": 2.361904761904762,
+          "hit6Count": 1,
+          "hit6Rate": 0.0013605442176870747,
+          "fixedPrizePayout": 16173230000
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.426630434782609,
+          "hit6Count": 3,
+          "hit6Rate": 0.004076086956521739,
+          "fixedPrizePayout": 21534420000
+        }
+      },
+      "OVERDUE18": {
+        "rule": "OVERDUE18",
+        "n": 1471,
+        "hit6Count": 2,
+        "hit6Rate": 0.0013596193065941536,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.8480105045223634,
+        "adjustedPValue": 1,
+        "ci95": {
+          "lower": 0.00016469863812150932,
+          "upper": 0.004902697992935854,
+          "method": "clopper-pearson"
+        },
+        "intersectionHistogram": {
+          "0": 55,
+          "1": 254,
+          "2": 525,
+          "3": 415,
+          "4": 181,
+          "5": 39,
+          "6": 2
+        },
+        "meanIntersection": 2.365737593473827,
+        "medianIntersection": 2,
+        "hit4PlusRate": 0.15091774303195105,
+        "hit5PlusRate": 0.02787219578518015,
+        "fixedPrizePayout": 33789330000,
+        "totalCost": 273076440000,
+        "fixedNet": -239287110000,
+        "costPerHit6": 136538220000,
+        "early": {
+          "n": 735,
+          "meanK": 2.3510204081632655,
+          "hit6Count": 1,
+          "hit6Rate": 0.0013605442176870747,
+          "fixedPrizePayout": 15690280000
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.380434782608696,
+          "hit6Count": 1,
+          "hit6Rate": 0.001358695652173913,
+          "fixedPrizePayout": 18099050000
+        }
+      },
+      "BALANCED18": {
+        "rule": "BALANCED18",
+        "n": 1471,
+        "hit6Count": 3,
+        "hit6Rate": 0.0020394289598912306,
+        "expectedNullHits": 3.3526633321301498,
+        "rawPValue": 0.6513435094971851,
+        "adjustedPValue": 1,
+        "ci95": {
+          "lower": 0.00042077691324085814,
+          "upper": 0.005948403177772349,
+          "method": "clopper-pearson"
+        },
+        "intersectionHistogram": {
+          "0": 47,
+          "1": 244,
+          "2": 506,
+          "3": 458,
+          "4": 179,
+          "5": 34,
+          "6": 3
+        },
+        "meanIntersection": 2.4024473147518695,
+        "medianIntersection": 2,
+        "hit4PlusRate": 0.14683888511216858,
+        "hit5PlusRate": 0.02515295717199184,
+        "fixedPrizePayout": 33719320000,
+        "totalCost": 273076440000,
+        "fixedNet": -239357120000,
+        "costPerHit6": 91025480000,
+        "early": {
+          "n": 735,
+          "meanK": 2.453061224489796,
+          "hit6Count": 2,
+          "hit6Rate": 0.0027210884353741495,
+          "fixedPrizePayout": 18468570000
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.3519021739130435,
+          "hit6Count": 1,
+          "hit6Rate": 0.001358695652173913,
+          "fixedPrizePayout": 15250750000
+        }
+      }
+    }
+  },
+  "pairedComparison": {
+    "HOT18": {
+      "rule": "HOT18",
+      "meanDeltaK": 0.01495581237253569,
+      "nullRandomizationInterval": {
+        "lower": -0.08021753908905506,
+        "upper": 0.08293677770224338
+      },
+      "pairedBootstrapCI95": {
+        "lower": -0.06322229775662815,
+        "upper": 0.09449354180829368
+      },
+      "twoSidedPValue": 0.7252,
+      "contingency": {
+        "bothHit": 0,
+        "bothMiss": 1466,
+        "ruleHitRandomMiss": 1,
+        "ruleMissRandomHit": 4
+      },
+      "mcNemar": {
+        "kind": "insufficient"
+      }
+    },
+    "COLD18": {
+      "rule": "COLD18",
+      "meanDeltaK": 0.005438477226376614,
+      "nullRandomizationInterval": {
+        "lower": -0.08021753908905506,
+        "upper": 0.07885791978246091
+      },
+      "pairedBootstrapCI95": {
+        "lower": -0.07409925220938138,
+        "upper": 0.08293677770224338
+      },
+      "twoSidedPValue": 0.9085,
+      "contingency": {
+        "bothHit": 0,
+        "bothMiss": 1463,
+        "ruleHitRandomMiss": 4,
+        "ruleMissRandomHit": 4
+      },
+      "mcNemar": {
+        "kind": "exact",
+        "discordant": 8,
+        "pValue": 1
+      }
+    },
+    "OVERDUE18": {
+      "rule": "OVERDUE18",
+      "meanDeltaK": -0.023113528212100613,
+      "nullRandomizationInterval": {
+        "lower": -0.08021753908905506,
+        "upper": 0.08157715839564922
+      },
+      "pairedBootstrapCI95": {
+        "lower": -0.10469068660774983,
+        "upper": 0.05914343983684568
+      },
+      "twoSidedPValue": 0.5876,
+      "contingency": {
+        "bothHit": 0,
+        "bothMiss": 1465,
+        "ruleHitRandomMiss": 2,
+        "ruleMissRandomHit": 4
+      },
+      "mcNemar": {
+        "kind": "exact",
+        "discordant": 6,
+        "pValue": 0.6874999999999969
+      }
+    },
+    "BALANCED18": {
+      "rule": "BALANCED18",
+      "meanDeltaK": 0.013596193065941536,
+      "nullRandomizationInterval": {
+        "lower": -0.08021753908905506,
+        "upper": 0.08021753908905506
+      },
+      "pairedBootstrapCI95": {
+        "lower": -0.06730115567641061,
+        "upper": 0.0938137321549966
+      },
+      "twoSidedPValue": 0.7508,
+      "contingency": {
+        "bothHit": 0,
+        "bothMiss": 1464,
+        "ruleHitRandomMiss": 3,
+        "ruleMissRandomHit": 4
+      },
+      "mcNemar": {
+        "kind": "exact",
+        "discordant": 7,
+        "pValue": 0.9999999999999962
+      }
+    }
+  },
+  "nullCalibration": {
+    "evaluatedDraws": 1471,
+    "nullJackpotProbability": 0.0022791728974372195,
+    "nullExpectedCount": 3.3526633321301498,
+    "nullProbZeroHits": 0.03485740099934049,
+    "nullPredictiveInterval95": [
+      0,
+      7
+    ],
+    "underpowered": true
+  },
+  "distributionAnalysis": {
+    "hypergeometricNullCounts": {
+      "0": 53.45948464468033,
+      "1": 262.43747007388527,
+      "2": 484.93880339739667,
+      "3": 431.05671413101925,
+      "4": 193.97552135895867,
+      "5": 41.77934306192956,
+      "6": 3.3526633321301498
+    },
+    "observedByRule": {
+      "RANDOM18": {
+        "0": 43,
+        "1": 286,
+        "2": 478,
+        "3": 428,
+        "4": 196,
+        "5": 36,
+        "6": 4
+      },
+      "HOT18": {
+        "0": 51,
+        "1": 264,
+        "2": 455,
+        "3": 478,
+        "4": 188,
+        "5": 34,
+        "6": 1
+      },
+      "COLD18": {
+        "0": 43,
+        "1": 259,
+        "2": 524,
+        "3": 417,
+        "4": 180,
+        "5": 44,
+        "6": 4
+      },
+      "OVERDUE18": {
+        "0": 55,
+        "1": 254,
+        "2": 525,
+        "3": 415,
+        "4": 181,
+        "5": 39,
+        "6": 2
+      },
+      "BALANCED18": {
+        "0": 47,
+        "1": 244,
+        "2": 506,
+        "3": 458,
+        "4": 179,
+        "5": 34,
+        "6": 3
+      }
+    }
+  },
+  "verdictsByRule": {
+    "HOT18": {
+      "verdict": "NO_EDGE",
+      "reasons": [
+        "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
+        "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
+      ]
+    },
+    "COLD18": {
+      "verdict": "NO_EDGE",
+      "reasons": [
+        "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
+        "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
+      ]
+    },
+    "OVERDUE18": {
+      "verdict": "NO_EDGE",
+      "reasons": [
+        "không có lift dương so với null lý thuyết",
+        "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)"
+      ]
+    },
+    "BALANCED18": {
+      "verdict": "NO_EDGE",
+      "reasons": [
+        "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
+        "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
+      ]
+    }
+  },
+  "antiLeakTests": {
+    "note": "Evidence-gated (not a hardcoded claim): this CLI run spawned lib/research/bao18-walkforward.test.ts as a child process at generation time and refused to write this artifact unless it exited 0 — see `evidence` for the exact source hash, command, and verification timestamp.",
+    "allPassing": true,
+    "evidence": {
+      "testFile": "lib/research/bao18-walkforward.test.ts",
+      "testFileSha256": "35109ffb8108745b238b4feb546d7e21310fe75e5c762c21d991c438725617b5",
+      "command": "node --import=tsx --test lib/research/bao18-walkforward.test.ts",
+      "exitCode": 0,
+      "passCount": 35,
+      "failCount": 0,
+      "verifiedAt": "2026-09-13T06:59:17.599Z"
+    }
+  },
+  "finalVerdict": "NO_EDGE",
+  "scientificGrade": "C — NO DEMONSTRATED EDGE"
+}

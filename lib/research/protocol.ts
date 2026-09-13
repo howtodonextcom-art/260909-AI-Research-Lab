@@ -145,3 +145,120 @@ export function summarizeEvidence(drawIds: string[], lock: ProtocolLock): {
   }
   return { retrospective, prospective };
 }
+
+/**
+ * §Provenance audit (Round 4): `reports/protocol-lock.json` is only a
+ * "current pointer" — by design it is silently overwritable
+ * (`research-lock.ts --force`). Without a separate append-only record of
+ * every hash that has ever been the *current* lock, a re-lock could replace
+ * an old identity with a new one and leave no trace the old one ever
+ * existed — which would make it impossible to tell a legitimate historical
+ * protocol change apart from an experiment registry entry that was simply
+ * never locked at all (i.e. tampered with, or the result of a bug).
+ * `reports/protocol-history.json` is that trace: `scripts/research-lock.ts`
+ * appends one entry every time it runs (idempotent — re-locking with an
+ * unchanged hash never duplicates an entry), and nothing else is allowed to
+ * rewrite or remove an existing entry.
+ */
+export type ProtocolHistorySource =
+  | "lock"
+  | "migrated-existing-lock"
+  | "migrated-pre-lock-registry";
+
+export type ProtocolHistoryEntry = {
+  protocolHash: string;
+  protocolVersion: string;
+  /** ISO timestamp this hash was first known to be the current lock (or, for a migrated entry, the best available evidence of when it was). */
+  recordedAt: string;
+  source: ProtocolHistorySource;
+  /** Present only for migrated entries — explains why this entry was reconstructed instead of written live by research-lock.ts. */
+  note?: string;
+};
+
+const PROTOCOL_HISTORY_SOURCES: ProtocolHistorySource[] = [
+  "lock",
+  "migrated-existing-lock",
+  "migrated-pre-lock-registry",
+];
+
+function describeProtocolHistoryEntryProblem(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return `bản ghi lịch sử không phải object (${Array.isArray(value) ? "array" : typeof value})`;
+  }
+  const row = value as Record<string, unknown>;
+  if (typeof row.protocolHash !== "string" || row.protocolHash.length === 0) return "thiếu protocolHash";
+  if (typeof row.protocolVersion !== "string" || row.protocolVersion.length === 0) return "thiếu protocolVersion";
+  if (typeof row.recordedAt !== "string" || Number.isNaN(Date.parse(row.recordedAt))) {
+    return `recordedAt không phải ISO timestamp hợp lệ: ${JSON.stringify(row.recordedAt)}`;
+  }
+  if (!PROTOCOL_HISTORY_SOURCES.includes(row.source as ProtocolHistorySource)) {
+    return `source không hợp lệ: ${JSON.stringify(row.source)}`;
+  }
+  if (row.note !== undefined && typeof row.note !== "string") return "note phải là chuỗi nếu có";
+  return null;
+}
+
+/**
+ * Fail-closed parse of `reports/protocol-history.json`: a malformed file (or
+ * a malformed entry inside it) returns `null`, never a partially-trusted
+ * array — a corrupt history file must never be silently treated as "no
+ * history" (that would defeat its entire purpose).
+ */
+export function parseProtocolHistory(value: unknown): ProtocolHistoryEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const entries: ProtocolHistoryEntry[] = [];
+  for (const item of value) {
+    const problem = describeProtocolHistoryEntryProblem(item);
+    if (problem) return null;
+    entries.push(item as ProtocolHistoryEntry);
+  }
+  return entries;
+}
+
+/**
+ * True if `hash` is either the current lock's hash or a documented
+ * historical one. There is deliberately no third way to become "recognized"
+ * — an unrecognized hash always means "cannot verify this was ever a real
+ * locked protocol", which callers must treat as a hard failure.
+ */
+export function isRecognizedProtocolHash(
+  hash: string,
+  currentLock: ProtocolLock | null,
+  history: ProtocolHistoryEntry[],
+): boolean {
+  if (currentLock && currentLock.protocolHash === hash) return true;
+  return history.some((entry) => entry.protocolHash === hash);
+}
+
+/**
+ * Appends `newEntry` unless a documented entry for the same hash already
+ * exists (idempotent — re-locking with an unchanged protocol must not
+ * duplicate the entry every time `research-lock.ts` runs). Pure: never
+ * mutates `history`, never edits or removes an existing entry.
+ */
+export function appendProtocolHistoryEntry(
+  history: ProtocolHistoryEntry[],
+  newEntry: ProtocolHistoryEntry,
+): ProtocolHistoryEntry[] {
+  if (history.some((entry) => entry.protocolHash === newEntry.protocolHash)) return history;
+  return [...history, newEntry];
+}
+
+/**
+ * When `protocol-history.json` does not exist yet but `protocol-lock.json`
+ * already does, the existing lock's identity must not simply vanish the
+ * moment history-tracking is introduced: it becomes history entry 1,
+ * source `"migrated-existing-lock"`, so the very first `research-lock.ts`
+ * run after this feature ships does not look like the protocol was "born"
+ * at that moment.
+ */
+export function seedProtocolHistoryFromExistingLock(lock: ProtocolLock): ProtocolHistoryEntry[] {
+  return [
+    {
+      protocolHash: lock.protocolHash,
+      protocolVersion: lock.protocolVersion,
+      recordedAt: lock.protocolLockedAt,
+      source: "migrated-existing-lock",
+    },
+  ];
+}
