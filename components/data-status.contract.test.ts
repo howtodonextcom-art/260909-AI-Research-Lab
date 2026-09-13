@@ -26,3 +26,9 @@ test("DataStatus surface Holm familySize từ registry summary", () => {
   assert.doesNotMatch(source, /đã có server store/);
   assert.match(source, /proxy lịch sự/);
 });
+
+test("DataStatus surface Fresh/Delayed/Stale/Unknown freshness labels", () => {
+  assert.match(source, /assessFreshness/);
+  assert.match(source, /Fresh \/ Delayed \/ Stale \/ Unknown/);
+  assert.match(source, /Độ tươi/);
+});

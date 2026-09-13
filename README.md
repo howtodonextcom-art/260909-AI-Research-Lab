@@ -1,286 +1,211 @@
 # Mega 6/45 Research Lab
 
-Công cụ nghiên cứu xác suất, kiểm thử chiến lược lịch sử và thiết kế danh mục vé cho xổ số Mega 6/45. Ứng dụng được xây dựng để trả lời một câu hỏi thực tế: một cách chọn số có tạo ra lợi thế ổn định so với chọn ngẫu nhiên hay chỉ là nhiễu trong dữ liệu quá khứ?
+Phòng thí nghiệm thống kê độc lập cho xổ số Mega 6/45: kiểm định xem có cách chọn số nào tạo lợi thế ổn định so với chọn ngẫu nhiên hay không, bằng walk-forward backtest, hiệu chỉnh đa kiểm định, bộ đối chứng âm, và một chuỗi provenance (protocol → registry → artifact → prospective ledger) được thiết kế để không thể tự mâu thuẫn trong im lặng.
 
-> **Lưu ý quan trọng:** Mega 6/45 Research Lab không dự đoán được kết quả quay số và không bảo đảm lợi nhuận. Nếu quy trình quay là ngẫu nhiên và công bằng, mọi bộ 6 số hợp lệ đều có cùng xác suất trúng Jackpot. Hãy coi đây là công cụ học tập, mô phỏng và quản trị ngân sách — không phải lời khuyên tài chính hay sản phẩm chính thức của Vietlott.
+> **Đây không phải công cụ dự đoán, không phải website Vietlott, không bán vé và không khuyến nghị mua.** Nếu quay số là ngẫu nhiên và công bằng, mọi bộ 6 số hợp lệ có cùng xác suất trúng Jackpot bất kể chiến lược chọn số nào. Coi đây là công cụ học thống kê, mô phỏng và quản trị ngân sách.
 
-## Bản chạy trực tuyến
+## Trạng thái khoa học hiện tại
 
-[Mở Mega 6/45 Research Lab](https://mega645-lab.angularsolution2025.chatgpt.site)
+**Grade: C — NO DEMONSTRATED EDGE.** Không chiến lược nào (kể cả các phương án nâng cao như Bao-18 reverse-proof) cho thấy lợi thế dự đoán được xác nhận trên dữ liệu chưa dùng để chọn chiến lược. Đây là kết quả phù hợp với một trò chơi quay độc lập và công bằng, không phải một hạn chế kỹ thuật của ứng dụng.
 
-Trang hiện được đặt ở chế độ riêng tư và có thể yêu cầu đăng nhập bằng tài khoản đã được cấp quyền.
+- **Xác suất trúng Jackpot mỗi vé:** không đổi — luôn `1/8.145.060`, bất kể số nóng/lạnh/lâu chưa ra hay bất kỳ thuật toán nào.
+- **Độ phủ danh mục (portfolio):** đã chứng minh bằng tổ hợp học chính xác — mua nhiều vé không lặp làm tăng số tổ hợp được phủ, không làm tăng xác suất từng vé.
+- **Bằng chứng prospective (dữ liệu thật sự chưa từng thấy tại thời điểm khoá protocol):** hiện **PENDING** — 4 dự đoán đã đóng băng cho kỳ `#01562`, 0 kỳ đã có kết quả thật (kỳ đó chưa xảy ra).
+- **Khuyến nghị chiến lược hiện tại:** không có — không phương án nào được hệ thống ủng hộ.
 
-## Tính năng chính
+Trạng thái này được hiển thị ngay đầu tab "Nghiên cứu" trên giao diện (panel "Tóm tắt cho người mới bắt đầu"), trước mọi thuật ngữ nâng cao (HAC, Holm-Bonferroni, protocol hash...).
 
-- **Cập nhật dữ liệu:** đồng bộ tăng dần từ nguồn upstream bằng CLI hoặc bằng nút **Cập nhật dữ liệu** trên giao diện; dữ liệu hợp lệ cũ luôn được giữ khi mạng lỗi.
-- **Phân tích lịch sử:** lọc kết quả theo 30 ngày, 90 ngày, 365 ngày hoặc toàn bộ dữ liệu; xem tần suất, độ lệch so với kỳ vọng và khoảng cách từ lần xuất hiện gần nhất.
-- **Backtest walk-forward:** tại mỗi kỳ, chiến lược chỉ được dùng các kỳ trước đó. Bốn phương án được so sánh gồm ngẫu nhiên, số nóng, số lạnh và phân bố cân bằng.
-- **Kiểm tra độ bền:** hiển thị lợi thế so với ngẫu nhiên, z-score và kết quả trên hai nửa thời gian. Pipeline development–validation–test theo thời gian chọn ứng viên **chỉ bằng validation** rồi kiểm tra lại trên tập test.
-- **Hiệu chỉnh nhiều chiến lược:** p-value một phía so với đối chứng ngẫu nhiên được hiệu chỉnh Holm-Bonferroni cho ba chiến lược không ngẫu nhiên, kèm khoảng tin cậy 95% của edge.
-- **Tính mục tiêu lợi nhuận:** ước lượng số tiền cần trúng, số vé và mức chi tối đa theo mục tiêu người dùng nhập.
-- **Danh mục 1–30 vé:** tạo các vé có mức chồng lặp được kiểm soát nhằm tăng độ phủ tổ hợp thay vì lặp lại quá nhiều cặp số.
-- **Mô phỏng và kiểm tra vé:** sinh bộ số có seed để tái lập kết quả, đối chiếu số trùng và mức giải theo bảng trả thưởng đang được mô hình hóa trong mã nguồn.
+## Kiến trúc tổng quan
+
+- **Next.js 16 + Vinext**, React 19, TypeScript 5, Tailwind CSS 4, Radix UI/shadcn.
+- Triển khai trên **Cloudflare Workers** qua Wrangler. Worker **không có filesystem ghi được và không gắn D1/R2/KV** (ngoại trừ một cache lịch sự ngắn hạn cho request upstream) — đây là một lựa chọn kiến trúc tường minh, xem `docs/adr/ADR-005-persistence-local-vs-durable.md`.
+- **Không có database phía server.** Dữ liệu tồn tại ở đúng 3 nơi: (1) snapshot tĩnh đóng gói cùng build (`public/data/power645.jsonl`), (2) IndexedDB trên thiết bị người dùng, (3) các file JSONL/JSON append-only dưới `reports/` do CLI ghi (registry thử nghiệm, prospective ledger, protocol lock/history) — không phải state runtime của Worker.
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): typecheck → lint → test (bao gồm test-discovery) → data:check → verify-provenance → build → Playwright E2E (Chromium desktop + mobile viewport), đúng thứ tự chạy local.
+
+## Bốn lớp bằng chứng khoa học trong UI
+
+Tab **Nghiên cứu** trình bày theo thứ tự từ dễ đến khó, đúng tinh thần "người mới hiểu kết luận trước, chuyên gia đào sâu bằng chứng sau":
+
+1. **Tóm tắt cho người mới bắt đầu** (`components/scientific-verdict.tsx`) — trạng thái khoa học, xác suất mỗi vé, số dự đoán prospective đang chờ/đã chấm điểm, có link nhảy thẳng tới Capability Inspector.
+2. **Trạng thái bộ dữ liệu** (`components/data-status.tsx`) — nguồn dữ liệu, hash, protocol hash hiện hành, family size/look count, đối chiếu chéo, và nhãn độ tươi **Fresh / Delayed / Stale / Unknown** (không bao giờ coi dữ liệu cũ như đang cập nhật).
+3. **Thống kê mô tả + walk-forward + holdout** — tần suất, backtest 4 chiến lược (RANDOM/HOT/COLD/BALANCED), development/validation/test chia theo thời gian, Holm-Bonferroni.
+4. **Sổ điểm thực nghiệm** (`components/experiment-scorecard.tsx`) — protocol lock, family registry, tóm tắt 5 bộ đối chứng âm A/B/C/E/F, bảng dự đoán prospective (PENDING/SCORED) kèm **trạng thái chuỗi hash** của ledger (số sự kiện đã hash-chain, số sự kiện LEGACY_UNCHAINED, kết quả xác minh).
+5. **Bao-18 Reverse Proof** (`components/bao18-panel.tsx`) — xem mục riêng bên dưới.
+6. **Tra cứu dữ liệu** (`components/data-explorer.tsx`) — tìm kỳ quay theo mã hoặc khoảng ngày, lọc hoàn toàn phía client trên dữ liệu đã tải.
+7. **Ablation & Portfolio Monte Carlo** (`components/diagnostics-panel.tsx`) — số liệu thật, đọc từ `public/data/{ablation,portfolio-mc}-summary.json`, khung rõ ràng "chẩn đoán, không phải lợi thế dự đoán".
+8. **Capability Inspector** (`components/capability-inspector.tsx`, neo `#capability-inspector`) — bản đồ đầy đủ mọi năng lực trong hệ thống kèm trạng thái trung thực (`END_TO_END` / `READ_ONLY` / `OPERATOR_GATED` / `STUB_NOT_PROMOTED`), kể cả các phần chỉ chạy qua CLI, để không có gì "vô hình" chỉ vì chưa có nút bấm.
+
+Tab **Portfolio 4+** cho danh mục vé chồng lặp kiểm soát, coverage chính xác (exact Random vs Projective benchmark là bảng so sánh chính), stepper 1–30 vé (mặc định 10), cost-frontier Bao-n. Tab **Vé mô phỏng** sinh vé bằng Web Crypto, chấm điểm độc lập — luôn gắn nhãn mô phỏng.
+
+Các panel artifact tùy chọn trên tab Nghiên cứu được bọc `PanelErrorBoundary` (`components/panel-error-boundary.tsx`) để một artifact hỏng không làm trắng toàn bộ app.
+
+## Các module nghiên cứu chính và trạng thái UI
+
+| Module | Nguồn | Trạng thái UI |
+|---|---|---|
+| Protocol lock/history | `lib/research/protocol.ts` | END_TO_END |
+| Experiment registry (id ràng buộc protocolHash) | `lib/research/experiments.ts`, `scripts/run-experiment.ts` | READ_ONLY |
+| Provenance verifier (chuỗi registry↔protocol↔artifact) | `lib/research/provenance-registry.ts`, `scripts/verify-provenance.ts` | OPERATOR_GATED (CLI/CI) |
+| Prospective freeze/append + hash chain | `lib/research/prospective.ts`, `scripts/research-prospective.ts` | Mutation: OPERATOR_GATED (cố ý, chống peek) — trạng thái chuỗi: READ_ONLY trong UI |
+| Negative controls A/B/C/E/F | `lib/research/negative-controls.ts`, `controls-summary.ts` | READ_ONLY |
+| Ablation harness | `lib/research/ablation.ts` → `research:ablation-summary` | READ_ONLY (số liệu thật trong Diagnostics panel) |
+| Portfolio Monte Carlo | `lib/research/portfolio-mc.ts` → `research:portfolio-mc-summary` | READ_ONLY (số liệu thật trong Diagnostics panel) |
+| Bao-18 reverse-proof walk-forward | `lib/research/bao18-walkforward.ts` → `research:bao18-summary` | READ_ONLY |
+| Ranking Score scaffold | `lib/research/ranking-score.ts` | STUB_NOT_PROMOTED — **không phải bộ dự đoán AI**, chưa qua promotion gate, bị cấm import trong `app/`/`components/` (enforced bởi `app/ui-ranking-score-ban.contract.test.ts`) |
+| Exact Random vs Projective benchmark | `lib/research/exact-benchmark.ts` | END_TO_END (Portfolio tab) |
+| Data Explorer | `lib/data/explorer.ts` | END_TO_END |
+| Bao-N cost frontier | `lib/research/bao.ts` | END_TO_END |
+| Health / readiness | `app/api/health`, `app/api/readiness` | END_TO_END |
+| CSP / security headers | `lib/security/headers.ts`, `public/_headers` | END_TO_END (Assets + API) |
+
+## Bao-18 Reverse Proof — "liệu một pool 18 số dựng từ lịch sử có thắng được null hay không"
+
+Kiểm định đối nghịch cố ý, dùng đúng công thức tổ hợp chính xác (`C(18,6)=18.564` vé, không bao giờ enumerate thật trong đường chạy chính):
+
+- **Protocol A — Reverse Peek:** pool được dựng TRỰC TIẾP từ 6 số thật của chính kỳ đang chấm điểm → luôn đạt 100% (tautology). Nhãn bắt buộc: **`INVALID_AS_EVIDENCE_OF_EDGE`**.
+- **Protocol B — Walk-forward hợp lệ:** pool chỉ dùng `draws[0:t]`, 5 rule (RANDOM18/HOT18/COLD18/OVERDUE18/BALANCED18), kiểm định nhị thức chính xác + Clopper-Pearson CI + Holm-Bonferroni, kèm bảng ổn định EARLY/LATE và cảnh báo biến cố hiếm (kỳ vọng hit6 dưới null rất nhỏ trên dữ liệu hiện có).
+- Mỗi artifact mang `scientificSpecHash` (chỉ hash các input khoa học: dataset, lookback, seed, rule family, endpoint, mô hình null) tách biệt khỏi `buildProvenance` (git commit, thời điểm chạy) — đổi commit không làm đổi định danh khoa học.
+- CLI **fail-closed theo bằng chứng thật**: `scripts/audit-bao18-walkforward.ts` tự chạy bộ test anti-leak của chính nó trước khi ghi artifact; test fail thì không ghi gì cả.
+
+Thông điệp bắt buộc, không được diễn giải khác đi: **"Reverse-peek có thể trông hoàn hảo vì nó rò rỉ đáp án. Walk-forward hợp lệ hiện chưa cho thấy edge dự đoán nào được chứng minh."**
+
+## Chuỗi provenance (protocol → registry → artifact → prospective)
+
+- `reports/protocol-lock.json` + `reports/protocol-history.json` — mọi hash protocol từng được khoá đều có dấu vết, kể cả khi phát hiện muộn (xem ghi chú lịch sử trong `reports/provenance-exceptions.json`).
+- `reports/experiments/registry.jsonl` — append-only; id thử nghiệm mới ràng buộc cả `datasetHash` lẫn `protocolHash` (không chỉ version string) để hai protocol khác hash không thể va chạm định danh dưới cùng một version label.
+- `reports/experiments/*.json` — artifact bất biến; script đăng ký **từ chối ghi đè** artifact đã tồn tại.
+- `reports/prospective-scorecard.jsonl` — sự kiện FROZEN/SCORED nối chuỗi hash (append-only thật sự, không sửa dòng cũ khi chấm điểm); dòng cũ trước khi có chuỗi hash được nhận diện trung thực là `LEGACY_UNCHAINED`, không bị coi như đã luôn được chain.
+- `npm run research:verify-provenance` — chạy độc lập, đọc-only, xác minh toàn bộ chuỗi trên và chạy trong CI.
 
 ## Cơ sở toán học
 
-Mega 6/45 chọn 6 số khác nhau từ 1 đến 45. Tổng số bộ số có thể có là:
+Mega 6/45 chọn 6 số khác nhau từ 1 đến 45. Tổng số bộ số có thể có:
 
-$$
-\binom{45}{6} = 8.145.060
-$$
+$$\binom{45}{6} = 8.145.060$$
 
-Với một vé cố định, xác suất trùng đúng $k$ số là:
+Xác suất trùng đúng $k$ số với một vé cố định:
 
-$$
-P(X=k)=\frac{\binom{6}{k}\binom{39}{6-k}}{\binom{45}{6}}
-$$
+$$P(X=k)=\frac{\binom{6}{k}\binom{39}{6-k}}{\binom{45}{6}}$$
 
-Bộ tối ưu danh mục sử dụng một **mặt phẳng xạ ảnh hữu hạn cấp 5**. Cấu trúc này tạo 31 khối, mỗi khối gồm 6 điểm và hai khối bất kỳ giao nhau đúng một điểm. Ứng dụng ánh xạ có seed từ các điểm sang số Mega 6/45, sau đó lấy tối đa 30 vé. Nhờ vậy:
+Danh mục 1–30 vé dùng **mặt phẳng xạ ảnh hữu hạn cấp 5** (31 khối, mỗi khối 6 điểm, hai khối bất kỳ giao đúng 1 điểm) để mỗi cặp vé dùng chung không quá một số. Thiết kế này cải thiện **độ phủ tổ hợp**, không thay đổi xác suất hay kỳ vọng của từng bộ số.
 
-- mỗi cặp vé dùng chung không quá một số;
-- các cặp số bên trong vé không bị lặp giữa các vé;
-- xác suất có ít nhất 4, 5 hoặc 6 số trùng của danh mục được cộng tuyến tính trong phạm vi cấu trúc này.
-
-Thiết kế trên cải thiện **độ phủ** so với việc mua nhiều vé gần giống nhau. Nó không làm thay đổi xác suất hay giá trị kỳ vọng của từng bộ số, không phát hiện “số chắc thắng” và không biến một trò chơi kỳ vọng âm thành khoản đầu tư có lợi nhuận đảm bảo.
+Bao-n (mua trọn `C(n,6)` vé từ một pool n số) cho `P(Jackpot) = C(n,6)/C(45,6)` chính xác — không cần enumerate. Một danh mục ngẫu nhiên cùng ngân sách (cùng số vé, không lặp) có union-probability jackpot **giống hệt** Bao-n; khác biệt thực sự nằm ở cấu trúc coverage các giải thấp hơn, không phải ở xác suất Jackpot.
 
 ## Dữ liệu
 
-Snapshot đi kèm nằm tại `public/data/power645.jsonl`:
+Snapshot đi kèm tại `public/data/power645.jsonl`:
 
 | Thuộc tính | Giá trị |
 |---|---:|
 | Sản phẩm | Mega 6/45 |
-| Khoảng thời gian | 20/07/2016 (#00001) – 11/09/2026 (#01561) |
-| Số kỳ quay | 1.561 |
-| Định dạng | JSON Lines |
-| Tính liên tục | Đầy đủ — 0 kỳ thiếu, 0 trùng lặp (`lib/data/continuity.ts`) |
+| Khoảng thời gian | 20/07/2016 (#00001) – hiện tại theo lần sync gần nhất |
+| Định dạng | JSON Lines, canonical |
+| Tính liên tục | 0 kỳ thiếu, 0 trùng lặp (`lib/data/continuity.ts`) |
 
-Nguồn chính là **vietlott.vn** (trang kết quả chính thức, crawl trực tiếp — xem `docs/adr/ADR-001-official-vietlott-source.md`). Mirror [vietvudanh/vietlott-data](https://github.com/vietvudanh/vietlott-data) (MIT) chỉ còn vai trò đối chiếu chéo (`npm run data:cross-check`), không bao giờ ghi đè nguồn chính. Ứng dụng kiểm tra ngày, mã kỳ, miền giá trị, số lượng số và bản ghi trùng trước khi phân tích. Xem thêm tại `public/data/SOURCE.md`.
+Nguồn chính: **vietlott.vn** (crawl trực tiếp trang kết quả chính thức — `docs/adr/ADR-001-official-vietlott-source.md`). Mirror [vietvudanh/vietlott-data](https://github.com/vietvudanh/vietlott-data) (MIT) chỉ dùng đối chiếu chéo (`npm run data:cross-check`), không bao giờ ghi đè nguồn chính. Host được giới hạn bằng allowlist (`lib/data/http.ts`: `vietlott.vn`, `raw.githubusercontent.com`) chống SSRF. Chi tiết trong `public/data/SOURCE.md`.
 
-## Pipeline dữ liệu
+### Cập nhật, cache, xung đột
 
-### Nguồn
-
-| Thuộc tính | Nguồn chính (vietlott.vn) | Nguồn phụ / đối chiếu (vietlott-data mirror) |
-|---|---|---|
-| Endpoint | Trang kết quả + trang chi tiết + AjaxPro history (`lib/data/sources/vietlott-official.ts`) | `raw.githubusercontent.com/vietvudanh/vietlott-data/.../power645.jsonl` |
-| Giấy phép | Trang công khai, chưa có giấy phép tái sử dụng rõ ràng | MIT |
-| Vai trò | Authoritative — `data:sync` chỉ đồng bộ từ đây | Chỉ đối chiếu (`data:cross-check`), không bao giờ ghi đè |
-| Phân trang | 8 kỳ/trang qua AjaxPro; EOF chỉ được chấp nhận sau khi crawl thực sự chạm mốc lịch sử đã biết (§8 — không suy diễn từ 0 dòng) | Không; toàn bộ là một snapshot |
-
-Vì mirror cho phép CORS, phần đối chiếu phía trình duyệt (khi cần) không cần API proxy. Host được ràng buộc bằng allowlist trong `lib/data/http.ts` (`vietlott.vn`, `raw.githubusercontent.com`); mọi URL khác bị từ chối — loại bỏ rủi ro SSRF phía máy chủ.
-
-> **Ràng buộc chỉ xuất hiện trên trình duyệt:** gửi `If-None-Match` làm request trở thành non-simple, kích hoạt CORS preflight `OPTIONS` mà `raw.githubusercontent.com` không trả về 2xx. Vì vậy phía browser dùng GET đơn giản (tải lại ~150 KB), còn CLI vẫn dùng request có điều kiện để nhận 304. `curl` không bộc lộ khác biệt này vì curl không preflight.
-
-### Schema
-
-Shape bản ghi trên đĩa giữ nguyên như upstream để snapshot tương thích byte-level:
-
-```jsonc
-{"date":"2017-10-25","id":"00198","result":[12,17,23,25,34,38],"process_time":"..."}
-```
-
-Metadata cấp file (product, nguồn, giấy phép, thời điểm sync, hash) nằm trong `public/data/power645.manifest.json`, không lặp lại trên từng bản ghi.
-
-Mọi bản ghi phải vượt qua: `id` không rỗng; `date` đúng `YYYY-MM-DD` **và tồn tại trên lịch**; đúng 6 số nguyên phân biệt trong 1–45. Bản ghi lỗi **không bao giờ bị bỏ qua im lặng** — chúng làm cả lần ghi bị hủy và được liệt kê trong báo cáo.
-
-### Cập nhật tăng dần và tính idempotent
-
-`data:sync` đọc snapshot hiện có, tải nguồn, chuẩn hoá, kiểm tra, gộp, rồi chỉ ghi khi mọi kiểm tra đều đạt. Ghi file theo kiểu atomic: ghi ra file tạm rồi `rename`; manifest được cập nhật sau cùng.
-
-Chạy lần hai với cùng nguồn cho `added = 0`, `conflicts = 0` và `datasetSha256` không đổi.
-
-### Xử lý xung đột
-
-Nếu nguồn trả về kết quả khác cho một mã kỳ đã có, đó là **xung đột**, không phải bản cập nhật. Dữ liệu cũ được giữ nguyên, lần sync thất bại với exit code khác 0, và xung đột được liệt kê để người dùng tự quyết định. Ghi đè im lặng là cách một ngày lỗi của upstream viết lại lịch sử.
-
-### Bộ nhớ đệm trình duyệt
-
-Bản cập nhật từ giao diện được lưu vào **IndexedDB trên thiết bị đó**, không gửi lên máy chủ. Ứng dụng luôn kèm sẵn `public/data/power645.jsonl` làm nguồn dự phòng và chỉ dùng cache khi cache hợp lệ và phủ nhiều kỳ hơn.
-
-Không dùng `localStorage` vì bộ dữ liệu ~150 KB và còn tăng theo mỗi kỳ.
-
-### Tự động cập nhật
-
-Khi mở tab **Nghiên cứu** (tab mặc định), ứng dụng hiển thị dữ liệu sẵn có ngay lập tức, **không chặn giao diện để chờ mạng**. Sau đó nếu `lastSuccessfulSync` đã quá TTL thì mới gọi mạng ngầm qua `POST /api/data/refresh` (Worker + nguồn Vietlott chính thức).
-
-TTL mặc định **12 giờ**, khai báo tại một chỗ duy nhất: `DATA_REFRESH_TTL_MS` trong `lib/data/refresh.ts`.
-
-Chỉ một request được chạy tại một thời điểm; bấm nút nhiều lần không tạo nhiều request. Request có timeout, `AbortController`, giới hạn kích thước phản hồi và tối đa 3 lần thử với backoff. `force`/backfill **không** có trên API công khai — dùng CLI `npm run data:sync -- --force`.
-
-**Offline dataset:** nếu tải snapshot bundled thất bại nhưng IndexedDB còn bản hợp lệ, app vẫn khởi động bằng cache thiết bị (`chooseLoadedDataset`).
-
-### Scheduler local (khi không mở UI)
-
-```bash
-npm run data:schedule          # sync idempotent + log reports/scheduler/
-npm run data:schedule -- --force
-```
-
-Gắn vào Windows Task Scheduler / cron. Máy tắt thì không chạy được; lần chạy sau mới bù. Đối chiếu mirror (`npm run data:cross-check`) là công cụ tùy chọn, **không** nằm trên critical path cập nhật.
-
-### Giới hạn Cloudflare Worker
-
-Worker **không có filesystem ghi được**, nên không có đường ghi dữ liệu phía máy chủ. Hosting hiện cũng chưa gắn D1/R2 (`.openai/hosting.json`). Vì vậy dữ liệu cập nhật chỉ tồn tại trên thiết bị người dùng. Muốn chia sẻ dữ liệu giữa các thiết bị thì phải chạy `npm run data:sync` rồi commit snapshot mới, hoặc bổ sung D1/R2.
-
-### Khôi phục khi cập nhật lỗi
-
-Sync thất bại không đụng tới snapshot. Nếu cần kiểm tra hoặc khôi phục:
-
-```bash
-npm run data:check          # kiểm tra toàn vẹn, offline
-npm run data:status         # xem manifest hiện tại
-git checkout -- public/data # trả về snapshot đã commit
-npm run data:sync -- --force  # bỏ qua ETag, tải lại toàn bộ (CLI quản trị)
-```
-
-## Công nghệ
-
-- Next.js 16 và Vinext
-- React 19, TypeScript 5
-- Tailwind CSS 4
-- Radix UI / shadcn components
-- Cloudflare Workers qua Wrangler
-- GitHub Actions CI (typecheck, lint, test, data:check, build)
+- `data:sync` chuẩn hoá → xác thực → gộp → **chỉ ghi khi mọi kiểm tra đạt**, ghi atomic (file tạm + rename). Chạy lại với cùng nguồn cho `added=0`, hash không đổi.
+- Xung đột (cùng mã kỳ, khác kết quả) **không bao giờ bị ghi đè im lặng** — sync thất bại, exit code khác 0, liệt kê xung đột.
+- Trên trình duyệt: bản cập nhật lưu **IndexedDB trên thiết bị đó**, không gửi lên server (Worker không có nơi để giữ). App khởi động ngay bằng dữ liệu bundled/cache, cập nhật ngầm nếu đã quá TTL (`DATA_REFRESH_TTL_MS` = 12 giờ, `lib/data/refresh.ts`), không chặn UI chờ mạng. `POST /api/data/refresh` có validate kích thước, chặn `force` từ public API, soft rate-limit **single-isolate** (`lib/data/rate-limit.ts` — response header `X-RateLimit-Scope: single-isolate`; **không** phải rate-limit phân tán), kèm client single-flight + official-fetch cache 12h. Độ tươi hiển thị Fresh/Delayed/Stale/Unknown (`lib/data/freshness.ts`).
+- Bảo mật response: CSP baseline + `X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy` / `Permissions-Policy` từ `lib/security/headers.ts`, ghi vào `public/_headers` (Cloudflare Assets) và gắn trên `/api/health`, `/api/readiness`, `/api/data/refresh`.
+- Runbook vận hành: `docs/production-runbook.md` (deploy/rollback local-smoke được; live Cloudflare drill còn operator-gated).
+- `npm run data:schedule` chạy đồng bộ định kỳ khi không mở UI (Task Scheduler/cron).
 
 ## Cài đặt và chạy local
 
-Yêu cầu: Node.js `>=22.13.0`, npm và Git.
+Yêu cầu Node.js `>=22.13.0`, npm, Git.
 
 ```bash
 git clone <duong-dan-repo>
-cd mega645-lab
+cd 260909-AI-Research-Lab
 npm run install:ci
 npm run data:sync   # tuỳ chọn: lấy các kỳ mới hơn snapshot kèm theo
 npm run dev
 ```
 
-Sau khi server khởi động, mở địa chỉ local được in trong terminal. Có thể truyền cổng riêng:
+## Các lệnh chính
 
 ```bash
-npm run dev -- --port 5173
+# Dữ liệu
+npm run data:sync            # đồng bộ từ vietlott.vn (thêm -- --force để tải lại toàn bộ)
+npm run data:check           # kiểm tra toàn vẹn snapshot + manifest, offline
+npm run data:status          # trạng thái dữ liệu hiện tại
+npm run data:cross-check     # đối chiếu chéo với mirror, chỉ ghi vào manifest
+npm run data:schedule        # sync định kỳ khi không mở UI
+
+# Nghiên cứu
+npm run research:lock                    # khoá protocol hiện hành + ghi lịch sử hash
+npm run research:experiment              # đăng ký + hoàn thành thử nghiệm (append-only)
+npm run research:controls                # chạy 5 bộ đối chứng âm A/B/C/E/F
+npm run research:ablation                # ablation harness (độ nhạy family size Holm)
+npm run research:ablation-summary        # xuất public/data/ablation-summary.json
+npm run research:portfolio-mc            # Monte Carlo cùng ngân sách
+npm run research:portfolio-mc-summary    # xuất public/data/portfolio-mc-summary.json
+npm run research:bao18-audit             # kiểm định Bao-18 reverse-proof, ghi report + JSON
+npm run research:bao18-summary           # xuất public/data/bao18-summary.json cho UI
+npm run research:prospective-freeze      # đóng băng dự đoán cho kỳ tiếp theo (chống peek)
+npm run research:prospective-append      # ghi kết quả thật cho các dự đoán đã đến hạn
+npm run research:prospective-summary     # xuất public/data/prospective-summary.json
+npm run research:verify-provenance       # xác minh toàn bộ chuỗi provenance, chạy trong CI
+
+# Kiểm thử / build
+npm test                     # typecheck + test:discovery + test:business + data:test
+npm run test:discovery       # đối chiếu mọi *.test.ts trên đĩa với danh sách chạy — chặn mồ côi/ảo
+npm run e2e:ci               # Playwright E2E (cũng chạy trong CI sau build)
+npm run lint
+npm run build                # vinext build + ghi CSP vào dist/client/_headers
+npm run headers:write        # regenerate public/_headers từ lib/security/headers.ts
 ```
 
-## Lệnh dữ liệu
-
-```bash
-npm run data:sync           # đồng bộ từ nguồn chính vietlott.vn (thêm -- --force để crawl lại toàn bộ)
-npm run data:check          # kiểm tra toàn vẹn snapshot + manifest, không dùng mạng
-npm run data:status         # in trạng thái dữ liệu hiện tại (thêm -- --json cho output máy đọc)
-npm run data:verify-live    # so sánh local với nguồn chính, chỉ đọc, không ghi
-npm run data:cross-check    # đối chiếu chéo: local vs trang chi tiết vs mirror; chỉ ghi crossCheck vào manifest
-npm run research:experiment # đăng ký + hoàn thành thử nghiệm cho mỗi chiến lược, ghi artifact vào reports/experiments/
-```
-
-`data:verify-live`, `data:cross-check` và `research:experiment` gọi mạng thật hoặc đọc dữ liệu thật nên **không** nằm trong `npm test`; bộ test mặc định chạy offline và tất định. Khi không có mạng, `data:verify-live` thoát với `LIVE VERIFICATION = NOT EXECUTED` (exit 2) thay vì báo thành công giả hoặc lẫn với một lỗi dữ liệu thật (exit 1).
+Các lệnh gọi mạng thật hoặc ghi dữ liệu thật (`data:sync`, `data:verify-live`, `data:cross-check`, `research:experiment`, `research:*-freeze/append`) **không** nằm trong `npm test` — bộ test mặc định chạy offline, tất định.
 
 ## Kiểm thử
 
-```bash
-npm test                # toàn bộ: nghiệp vụ + pipeline dữ liệu
-npm run test:business   # chỉ nghiệp vụ
-npm run data:test       # chỉ pipeline dữ liệu
-```
+Hiện có bộ test tất định trải trên các file được `npm run test:discovery` đối chiếu tự động với danh sách khai báo trong `package.json` — một file test tồn tại trên đĩa mà không được liệt kê (mồ côi) hoặc được liệt kê mà không tồn tại (ảo) đều làm gate thất bại. Playwright E2E (`e2e/`, `npm run e2e:ci`) chạy trong CI sau build.
 
-Kiểm tra kiểu, lint và build sản phẩm:
+Bao phủ: xác suất/tổ hợp, exact benchmark, xác thực vé, backtest walk-forward, null chính xác + Monte Carlo tất định, negative controls A/B/C/E/F, Bao-18 anti-leak, chuỗi hash prospective, ràng buộc định danh thử nghiệm theo protocolHash, chuẩn hoá/gộp/phát hiện xung đột dữ liệu, allowlist chống SSRF, rate-limit, freshness labels, CSP headers, error-boundary contract, và các contract test nguồn (không import `ranking-score` trong UI, tab mặc định là Nghiên cứu, không có claim quá mức trong Diagnostics/Bao-18 panel).
 
-```bash
-npx tsc --noEmit
-npm run lint
-npm run build
-```
-
-Test nghiệp vụ bao phủ xác suất/tổ hợp, xác thực vé, phân tích dữ liệu, backtest, tính lợi nhuận, các bất biến của danh mục, mô hình null chính xác + Monte Carlo, negative controls và experiment registry. Test pipeline bao phủ chuẩn hoá, xác thực, khử trùng lặp, phát hiện xung đột, gộp tăng dần, tính ổn định của hash, ghi file atomic, lỗi mạng, 304, upstream đổi schema, TTL tự cập nhật, allowlist chống SSRF, continuity, cross-check và các fixture parser nguồn chính thức (trang đổi giao diện, 0 dòng bất thường, Ajax lỗi/thiếu trường, dữ liệu méo).
-
-## Phương pháp nghiên cứu
-
-Chi tiết đầy đủ và bằng chứng nằm trong `docs/adr/` và `reports/research-core-upgrade-final.md`. Tóm tắt:
-
-- **Endpoint chính** (`lib/research/statistics.ts:PRIMARY_ENDPOINT`): trung bình số trùng khớp mỗi vé — null phân phối chính xác, biết trước (E[X] = 0.8).
-- **Mô hình null**: phân phối hypergeometric chính xác (`lib/profit.ts:outcomes`) cho các đại lượng có công thức đóng; động cơ Monte Carlo có seed, tất định (`lib/research/statistics.ts:runMonteCarloNull`) cho các thống kê không tiện tính chính xác — ví dụ chẩn đoán độ công bằng thay cho diễn giải chi-square(44) ngây thơ trước đây.
-- **Đa kiểm định**: Holm-Bonferroni; `familyId` được đăng ký cho từng lô thử nghiệm (`lib/research/experiments.ts`), dù việc hiệu chỉnh theo toàn bộ lịch sử family (thay vì chỉ các chiến lược đang chạy) chưa được nối dây đầy đủ — xem "Deferred work" trong báo cáo cuối.
-- **Protocol freeze**: `lib/research/protocol.ts:CURRENT_PROTOCOL` + hash SHA-256 tất định trên chính protocol đó — đổi bất kỳ trường nào (endpoint, alpha, lookback, tập chiến lược, luật chia, luật chọn, phép kiểm định) đều đổi hash.
-- **Negative controls** (bắt buộc, §28): IID synthetic, time-shuffle, random-baseline-tự-nhất-quán trong `lib/research/negative-controls.ts`; future-mutation đã có sẵn trong `lib/analytics.test.ts`.
-- **Experiment registry**: `reports/experiments/registry.jsonl` + một artifact JSON bất biến mỗi thử nghiệm, chạy bằng `npm run research:experiment`.
-
-### Runbook vận hành: prospective freeze/append (khi kỳ mới thật sự về)
-
-`reports/protocol-lock.json` hiện khoá `prospectiveStartDrawId = "01562"` — kỳ này **chưa xảy ra**. `reports/prospective-scorecard.jsonl` đã có 4 dự đoán đóng băng (một mỗi chiến lược) chờ kỳ `#01562`. Đây là quy trình chính xác một người vận hành làm khi kỳ `#01562` (hoặc kỳ tiếp theo) thật sự về:
-
-1. **Đồng bộ dữ liệu trước** — không được append kết quả bằng tay:
-   ```bash
-   npm run data:sync
-   ```
-   Lệnh này lấy kỳ mới từ vietlott.vn và ghi vào `public/data/power645.jsonl` + manifest, atomic, chỉ khi mọi kiểm tra đạt.
-
-2. **Ghi kết quả cho các dự đoán đã đóng băng đang chờ**:
-   ```bash
-   npm run research:prospective-append
-   ```
-   - Thành công thật: in `ĐÃ GHI KẾT QUẢ CHO N KỲ (...)` kèm `matches`/`tier` từng chiến lược.
-   - **Chưa tới lượt** (trạng thái đúng hôm nay, trước khi `#01562` về): in `Không có kỳ nào đến hạn (chưa có kết quả thật cho các kỳ đang chờ). Không có gì để làm.` và thoát mã 0 — đây là **từ chối đúng**, không phải lỗi. Nó có nghĩa dataset chưa chứa kết quả thật cho kỳ đang chờ, nên không có gì để chấm điểm (chống peek).
-
-3. **Đóng băng dự đoán cho kỳ kế tiếp** (sau khi kỳ vừa rồi đã được append ở bước 2):
-   ```bash
-   npm run research:prospective-freeze
-   ```
-   - Mặc định freeze kỳ `next` (kỳ liền sau `latestDrawId` trong dataset hiện có). Thành công thật: in `ĐÃ ĐÓNG BĂNG N DỰ ĐOÁN CHO KỲ #...` kèm từng vé.
-   - **Từ chối đúng** khi: `protocolHash` không khớp lock (đã đổi protocol — không được gắn nhãn prospective sau khi đổi luật); kỳ mục tiêu đã có kết quả thật trong dataset (không được "dự đoán" kỳ đã biết); hoặc chưa có `reports/protocol-lock.json` hợp lệ (chạy `npm run research:lock` trước). Mọi từ chối đều thoát khác 0 và **không ghi file** — không có trạng thái nửa vời.
-
-4. **Xác nhận không đụng lịch sử**: `git diff reports/prospective-scorecard.jsonl` chỉ nên có dòng mới được **thêm vào cuối** (append-only) — không dòng cũ nào bị sửa. Nếu thấy dòng cũ đổi, đó là bug, không commit.
-
-Thứ tự đúng luôn là **sync → append (kỳ cũ) → freeze (kỳ mới)**, không bao giờ ngược lại — freeze trước khi append nghĩa là chưa chấm điểm dự đoán cũ mà đã mở dự đoán mới, vẫn an toàn về mặt chống-peek nhưng dễ gây nhầm lẫn vận hành.
-
-
+## Cấu trúc thư mục
 
 ```text
-app/                          Trang và giao diện chính
-components/data-status.tsx    Panel trạng thái dữ liệu và nút cập nhật
-components/                   Các phòng lab và UI components
-hooks/use-draw-data.ts        Nạp dữ liệu, cache, tự cập nhật theo TTL
-lib/mega645.ts                Luật chơi, kiểm tra vé, đánh giá kết quả
-lib/analytics.ts              Thống kê, backtest walk-forward, chọn ứng viên
-lib/profit.ts                 Xác suất tổ hợp và mô hình lợi nhuận
-lib/portfolio.ts              Bộ tạo danh mục vé có kiểm soát chồng lặp
-lib/research/statistics.ts    Null chính xác, engine Monte Carlo, chẩn đoán độ công bằng
-lib/research/rng.ts           PRNG tất định dùng chung cho Monte Carlo/negative controls
-lib/research/protocol.ts      Protocol nghiên cứu đông cứng + hash, phân loại retro/prospective
-lib/research/experiments.ts   Experiment registry (đăng ký/chuyển trạng thái) + builder artifact
-lib/research/negative-controls.ts  Bộ đối chứng âm (IID synthetic, time-shuffle, random baseline)
-lib/data/types.ts             Hợp đồng dữ liệu canonical
-lib/data/schema.ts            Chuẩn hoá và xác thực từng bản ghi
-lib/data/jsonl.ts             Đọc/ghi JSONL dạng canonical
-lib/data/merge.ts             Gộp, khử trùng lặp, phát hiện xung đột
-lib/data/continuity.ts        Phân tích tính liên tục mã kỳ (thiếu/trùng)
-lib/data/cross-check.ts       Đối chiếu chéo mẫu tất định (bảng chính/trang chi tiết/mirror)
-lib/data/sync.ts              Điều phối sync (storage và clock được inject)
-lib/data/persistence.ts       Ghi file atomic phía Node
-lib/data/browser-cache.ts     Cache IndexedDB
-lib/data/refresh.ts           Nạp và cập nhật phía trình duyệt, TTL
-lib/data/http.ts              Allowlist, timeout, giới hạn kích thước, retry (GET + POST)
-lib/data/sources/             Adapter nguồn dữ liệu (official chính, mirror phụ)
-lib/**/*.test.ts              Kiểm thử
-public/data/                  Snapshot, manifest và thông tin nguồn
-docs/adr/                     Quyết định kiến trúc (ADR-001..004)
-reports/                      Baseline, báo cáo cuối, experiment registry + artifacts
-scripts/data-*.ts             CLI dữ liệu
-scripts/run-experiment.ts     Đăng ký + hoàn thành thử nghiệm, ghi artifact
-scripts/                      Script cài đặt, chạy và build
-test/fixtures/                Dữ liệu mẫu cho test
+app/                              Trang chính, route API, contract test
+components/                       Các panel: scientific-verdict, data-status,
+                                   experiment-scorecard, bao18-panel,
+                                   capability-inspector, diagnostics-panel,
+                                   data-explorer, cost-frontier, portfolio-lab,
+                                   profit-lab, panel-error-boundary, research-nav
+hooks/use-draw-data.ts            Nạp dữ liệu, cache, tự cập nhật theo TTL
+lib/mega645.ts                    Luật chơi, kiểm tra vé, đánh giá kết quả
+lib/analytics.ts                  Thống kê, backtest walk-forward, chọn ứng viên
+lib/profit.ts, lib/portfolio.ts   Xác suất/tổ hợp, danh mục vé chồng lặp kiểm soát
+lib/research/                     Protocol, experiments, provenance, prospective,
+                                   controls, ablation, portfolio-MC, bao/bao18,
+                                   exact-benchmark, ranking-score (stub)
+lib/data/                         Schema, merge, continuity, cross-check, sync,
+                                   persistence, browser-cache, refresh, http,
+                                   rate-limit, freshness, explorer, sources/
+lib/observability/                Structured logs, readiness checks
+lib/security/                     CSP + security header source of truth
+docs/                             ADR-001..005 + production-runbook.md
+e2e/                              Playwright browser E2E (CI)
+reports/                          Registry, artifact, protocol lock/history,
+                                   prospective ledger, báo cáo audit các vòng
+scripts/                          CLI dữ liệu, nghiên cứu, export, verify, headers
+public/data/                      Snapshot, manifest, các *-summary.json cho UI
+public/_headers                   Cloudflare Assets security headers (generated)
 ```
 
 ## Nguyên tắc diễn giải kết quả
 
-1. Tần suất quá khứ không làm một số “đến lượt” xuất hiện ở kỳ tiếp theo.
-2. Kết quả backtest tốt có thể do chọn chiến lược sau khi đã xem dữ liệu, thử nhiều giả thuyết hoặc gặp may.
-3. Một tín hiệu đáng kiểm tra tiếp cần tồn tại trên dữ liệu chưa dùng để thiết kế chiến lược và sau điều chỉnh kiểm định nhiều lần.
-4. Ba giai đoạn development/validation/test là **chia hồi cứu trên dữ liệu đã có sẵn**. Tập test là holdout theo nghĩa cơ học — nó không tham gia việc chọn ứng viên — nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ những kỳ quay phát sinh **sau khi** protocol được khoá (`PROTOCOL_VERSION` trong `lib/analytics.ts`, đồng bộ thủ công với `CURRENT_PROTOCOL.version` + hash SHA-256 tất định trong `lib/research/protocol.ts`) mới là bằng chứng prospective thật sự — xem `classifyEvidence()`. Việc thêm dữ liệu mới không được dùng để chọn lại chiến lược rồi tuyên bố thành công.
-5. Bảng “thống kê mô tả toàn bộ lịch sử” tính trên mọi kỳ, kể cả phần test, nên không bao giờ được dùng để chọn chiến lược hay sinh khuyến nghị.
-4. Jackpot có thể thay đổi giá trị kỳ vọng theo từng kỳ, nhưng thuế, giải chia sẻ, xác suất không có người trúng và chi phí vốn vẫn phải được tính riêng.
-5. Chỉ sử dụng ngân sách giải trí có thể mất hoàn toàn; không vay tiền, gấp thếp hoặc dùng kết quả mô phỏng như cam kết lợi nhuận.
+1. Tần suất quá khứ không làm một số "đến lượt" ở kỳ tiếp theo.
+2. Backtest tốt có thể do chọn chiến lược sau khi xem dữ liệu, thử nhiều giả thuyết, hoặc may rủi — đây là lý do có Holm-Bonferroni và negative controls.
+3. Chỉ những kỳ quay **sau khi protocol đã khoá** (`classifyEvidence()` trong `lib/research/protocol.ts`) mới là bằng chứng prospective thật; development/validation/test là chia hồi cứu trên dữ liệu đã có, không đảm bảo chưa từng có người nhìn thấy.
+4. Bảng "thống kê mô tả toàn bộ lịch sử" tính trên mọi kỳ kể cả phần test — không được dùng để chọn chiến lược.
+5. Jackpot thay đổi theo doanh số/số người trúng; thuế và chia sẻ giải phải tính riêng, không gộp vào EV giải cố định.
+6. Chỉ dùng ngân sách giải trí có thể mất hoàn toàn; không vay tiền hay gấp thếp theo kết quả mô phỏng.
 
 ## Phạm vi và giấy phép
 
-Dự án này độc lập, không liên kết và không được Vietlott bảo trợ. Thông tin luật chơi hoặc cơ cấu giải có thể thay đổi; hãy đối chiếu nguồn chính thức trước khi ra quyết định mua vé.
-
-Mã nguồn dự án được cấp phép theo **MIT** — xem file [`LICENSE`](./LICENSE) tại gốc repo (đã đồng bộ với trường `license` trong `package.json`). Giấy phép này chỉ áp dụng cho mã nguồn ứng dụng; nó không cấp quyền gì đối với luật chơi, cơ cấu giải hay nhãn hiệu của Vietlott, và không thay đổi vai trò/giấy phép của các nguồn dữ liệu upstream đã nêu ở phần "Dữ liệu" (vietlott.vn — trang công khai, chưa có giấy phép tái sử dụng rõ ràng; mirror `vietvudanh/vietlott-data` — MIT, giữ nguyên).
+Dự án độc lập, không liên kết và không được Vietlott bảo trợ. Mã nguồn cấp phép **MIT** — xem [`LICENSE`](./LICENSE) (đồng bộ với `package.json`). Giấy phép chỉ áp dụng cho mã nguồn ứng dụng, không cấp quyền với luật chơi/cơ cấu giải/nhãn hiệu Vietlott, và không thay đổi vai trò của các nguồn dữ liệu upstream nêu ở phần "Dữ liệu".

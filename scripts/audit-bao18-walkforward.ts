@@ -21,7 +21,8 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadSnapshot, resolvePaths } from "../lib/data/persistence";
 import { serializeDrawsJsonl } from "../lib/data/jsonl";
 import { sha256Hex } from "../lib/data/hash";
@@ -64,6 +65,115 @@ function fail(message: string): never {
 }
 
 // ---------------------------------------------------------------------------
+// GAP-07 evidence gate — extracted as a pure, importable, dependency-injected
+// function so it can be regression-tested (see
+// `scripts/audit-bao18-evidence-gate.test.ts`) WITHOUT mutating the real
+// committed `lib/research/bao18-walkforward.test.ts` and WITHOUT reimplementing
+// this logic in the test (which would drift from what the CLI actually runs).
+// The real CLI flow below calls this exact function with the real test path;
+// the test calls it with a throwaway temp-dir test file instead. Return shape
+// is a discriminated result — `main()`-style callers must check `ok` before
+// doing anything artifact-affecting, mirroring the fail-closed check below.
+// ---------------------------------------------------------------------------
+export type EvidenceGateResult =
+  | {
+      ok: true;
+      evidence: {
+        testFile: string;
+        testFileSha256: string;
+        command: string;
+        exitCode: number;
+        passCount: number | null;
+        failCount: number | null;
+        verifiedAt: string;
+      };
+    }
+  | { ok: false; reason: string; exitCode: number; stdout: string; stderr: string };
+
+/**
+ * Spawns `node --import=tsx --test <testRelativePath>` as a child process and
+ * reports pass/fail. Takes the test file path as a parameter (not hardcoded)
+ * so a test harness can point it at a temporary, deliberately-failing (or
+ * passing) throwaway file instead of the real committed test suite.
+ */
+export async function runEvidenceGate(
+  testRelativePathOrAbs: string,
+  options: { cwd?: string } = {},
+): Promise<EvidenceGateResult> {
+  const cwd = options.cwd ?? projectRoot;
+  let testFileSource: string;
+  try {
+    const absolute = path.isAbsolute(testRelativePathOrAbs)
+      ? testRelativePathOrAbs
+      : path.join(cwd, testRelativePathOrAbs);
+    testFileSource = await readFile(absolute, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `không đọc được test file để tính evidence hash: ${error instanceof Error ? error.message : String(error)}`,
+      exitCode: -1,
+      stdout: "",
+      stderr: "",
+    };
+  }
+  const testFileSha256 = await sha256Hex(testFileSource);
+  const command = `node --import=tsx --test "${testRelativePathOrAbs}"`;
+  let exitCode = 0;
+  let stdout = "";
+  let stderr = "";
+  // Strip `NODE_TEST_CONTEXT` (and friends) before spawning: Node's own test
+  // runner sets this on itself when running as a child of `node --test`, and
+  // if it leaked into this nested `node --test` invocation (e.g. when this
+  // gate is exercised from inside the GAP-07 regression test, which itself
+  // runs under `node --test`), the nested process silently switches to a
+  // v8-serialized child reporter and always exits 0 regardless of actual
+  // pass/fail — exactly the failure-to-fail-closed this gate must never
+  // have. The real `research:bao18-audit` CLI is never itself run under
+  // `node --test`, so this is purely defensive, but it makes the gate
+  // correct regardless of the calling process's own test-runner state.
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_TEST_CONTEXT;
+  try {
+    const output = execSync(command, { cwd, stdio: "pipe", env: childEnv });
+    stdout = output.toString();
+  } catch (error) {
+    const err = error as { status?: number | null; stdout?: Buffer; stderr?: Buffer };
+    exitCode = err.status ?? 1;
+    stdout = err.stdout?.toString() ?? "";
+    stderr = err.stderr?.toString() ?? "";
+  }
+  const verifiedAt = new Date().toISOString();
+  if (exitCode !== 0) {
+    return { ok: false, reason: `test suite KHÔNG pass (exit code ${exitCode})`, exitCode, stdout, stderr };
+  }
+  const passCountMatch = stdout.match(/pass\s+(\d+)/);
+  const failCountMatch = stdout.match(/fail\s+(\d+)/);
+  return {
+    ok: true,
+    evidence: {
+      testFile: testRelativePathOrAbs,
+      testFileSha256,
+      command,
+      exitCode,
+      passCount: passCountMatch ? Number(passCountMatch[1]) : null,
+      failCount: failCountMatch ? Number(failCountMatch[1]) : null,
+      verifiedAt,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main-module guard — this file is imported by
+// `scripts/audit-bao18-evidence-gate.test.ts` to reach `runEvidenceGate`
+// without triggering the full CLI run (git provenance, snapshot load,
+// artifact write) as a side effect of the import. Only the top-level
+// `npm run research:bao18-audit` invocation (or a direct `node
+// scripts/audit-bao18-walkforward.ts`) executes everything below.
+// ---------------------------------------------------------------------------
+const isMainModule = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMainModule) {
+// ---------------------------------------------------------------------------
 // §25 — Provenance preflight
 // ---------------------------------------------------------------------------
 console.log("\nBAO-18 REVERSE-PROOF WALK-FORWARD AUDIT (Master Prompt v2.0)\n");
@@ -88,52 +198,24 @@ console.log(`  Worktree: ${workingTreeStatus}`);
 // Anti-leak evidence gate — the artifact's §K claims "N anti-leak tests pass"
 // only if THIS RUN actually just spawned the test file as a child process and
 // verified it exited 0. Fail-closed: refuse to write the artifact otherwise,
-// and never accept a hardcoded "PASS" string as evidence.
+// and never accept a hardcoded "PASS" string as evidence. Uses the extracted
+// `runEvidenceGate` above so this real CLI path and the GAP-07 regression
+// test call the identical function.
 // ---------------------------------------------------------------------------
 console.log("\n== Anti-leak evidence gate ==");
 const testRelativePath = "lib/research/bao18-walkforward.test.ts";
-let testFileSource: string;
-try {
-  testFileSource = await readFile(`${projectRoot}${testRelativePath}`, "utf8");
-} catch (error) {
-  fail(`không đọc được test file để tính evidence hash: ${error instanceof Error ? error.message : String(error)}`);
-}
-const testFileSha256 = await sha256Hex(testFileSource);
-const testGateCommand = `node --import=tsx --test ${testRelativePath}`;
-let testExitCode = 0;
-let testStdout = "";
-let testStderr = "";
-try {
-  const output = execSync(testGateCommand, { cwd: projectRoot, stdio: "pipe" });
-  testStdout = output.toString();
-} catch (error) {
-  const err = error as { status?: number | null; stdout?: Buffer; stderr?: Buffer };
-  testExitCode = err.status ?? 1;
-  testStdout = err.stdout?.toString() ?? "";
-  testStderr = err.stderr?.toString() ?? "";
-}
-const testVerifiedAt = new Date().toISOString();
+const gateResult = await runEvidenceGate(testRelativePath, { cwd: projectRoot });
 console.log(`  Test file: ${testRelativePath}`);
-console.log(`  Test file SHA-256: ${testFileSha256}`);
-console.log(`  Command: ${testGateCommand}`);
-console.log(`  Exit code: ${testExitCode}`);
-if (testExitCode !== 0) {
-  console.error(testStdout);
-  console.error(testStderr);
-  fail(`anti-leak test suite KHÔNG pass (exit code ${testExitCode}) — từ chối ghi artifact (§35 fail-closed).`);
+console.log(`  Command: node --import=tsx --test ${testRelativePath}`);
+if (!gateResult.ok) {
+  console.error(gateResult.stdout);
+  console.error(gateResult.stderr);
+  fail(`anti-leak test suite KHÔNG pass (exit code ${gateResult.exitCode}) — từ chối ghi artifact (§35 fail-closed).`);
 }
-const testPassCountMatch = testStdout.match(/pass\s+(\d+)/);
-const testFailCountMatch = testStdout.match(/fail\s+(\d+)/);
-const antiLeakEvidence = {
-  testFile: testRelativePath,
-  testFileSha256,
-  command: testGateCommand,
-  exitCode: testExitCode,
-  passCount: testPassCountMatch ? Number(testPassCountMatch[1]) : null,
-  failCount: testFailCountMatch ? Number(testFailCountMatch[1]) : null,
-  verifiedAt: testVerifiedAt,
-};
-console.log(`  ✓ Test suite exited 0 at ${testVerifiedAt} (pass=${antiLeakEvidence.passCount ?? "?"}, fail=${antiLeakEvidence.failCount ?? "?"}) — evidence embedded in artifact.`);
+const antiLeakEvidence = gateResult.evidence;
+console.log(`  Test file SHA-256: ${antiLeakEvidence.testFileSha256}`);
+console.log(`  Exit code: ${antiLeakEvidence.exitCode}`);
+console.log(`  ✓ Test suite exited 0 at ${antiLeakEvidence.verifiedAt} (pass=${antiLeakEvidence.passCount ?? "?"}, fail=${antiLeakEvidence.failCount ?? "?"}) — evidence embedded in artifact.`);
 
 const paths = resolvePaths(projectRoot);
 let snapshot;
@@ -782,3 +864,4 @@ ${anySignal
 await writeFile(mdPath, report, "utf8");
 console.log(`  ✓ Markdown report: ${reportBase}.md`);
 console.log("\n  Xong.");
+} // end isMainModule guard

@@ -9,9 +9,11 @@ import { DataStatus } from "@/components/data-status";
 import { DataExplorer } from "@/components/data-explorer";
 import { ExperimentScorecard } from "@/components/experiment-scorecard";
 import { ScientificVerdict } from "@/components/scientific-verdict";
+import { ResearchNav } from "@/components/research-nav";
 import { Bao18Panel } from "@/components/bao18-panel";
 import { CapabilityInspector } from "@/components/capability-inspector";
 import { DiagnosticsPanel } from "@/components/diagnostics-panel";
+import { PanelErrorBoundary } from "@/components/panel-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -86,6 +88,11 @@ function FrequencyCell({ row, maxCount }: { row: ReturnType<typeof calculateFreq
 function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: DrawDataState }) {
   const [windowId, setWindowId] = useState<WindowId>("365D");
   const [strategy, setStrategy] = useState<StrategyId>("HOT");
+  // Anti automation-bias (Master Prompt §11): the concrete 6-number output is
+  // hidden by default and only shown after an explicit user action, paired
+  // with a disclaimer that never leaves the number set once revealed. Surrounding
+  // context (strategy name, gates, z-score) stays visible either way.
+  const [suggestionRevealed, setSuggestionRevealed] = useState(false);
   const [protocolLock, setProtocolLock] = useState<ProtocolLock | null>(null);
   const [familySummary, setFamilySummary] = useState<ExperimentFamilySummary | null>(null);
   const windowDraws = useMemo(() => filterByWindow(draws, windowId), [draws, windowId]);
@@ -157,9 +164,15 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           {WINDOWS.map((window) => <Button key={window.id} aria-pressed={windowId === window.id} className={windowId === window.id ? "window-active" : ""} size="sm" variant="ghost" onClick={() => setWindowId(window.id)}>{window.label}</Button>)}
         </div>
 
-        <ScientificVerdict protocolLock={protocolLock} />
+        <PanelErrorBoundary name="Scientific Verdict">
+          <ScientificVerdict protocolLock={protocolLock} />
+        </PanelErrorBoundary>
 
-        <DataStatus state={dataState} protocolLock={protocolLock} familySummary={familySummary} />
+        <ResearchNav />
+
+        <PanelErrorBoundary name="Data Status">
+          <DataStatus state={dataState} protocolLock={protocolLock} familySummary={familySummary} />
+        </PanelErrorBoundary>
 
         <div className="metrics-grid">
           <Metric label="Số kỳ trong mẫu" value={windowDraws.length.toLocaleString("vi-VN")} note={(windowDraws.length * 6).toLocaleString("vi-VN") + " bóng đã quay"} />
@@ -199,7 +212,7 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           </div>
         </section>
 
-        <section className="analysis-card">
+        <section id="evidence-section" className="analysis-card">
           <div className="section-heading"><div><p className="eyebrow">Walk-forward · nhìn 90 kỳ trước</p><h2>Thống kê mô tả toàn bộ lịch sử</h2></div><Badge className="status-honest">Không nhìn trước tương lai</Badge></div>
           <p id="history-table-note" className="table-hint">Bảng rộng có thể cuộn ngang trên màn hình nhỏ.</p>
           <div className="table-wrap" tabIndex={0} aria-describedby="history-table-note">
@@ -242,17 +255,29 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
           <p className="method-note"><Info /><span>{selectedReliability ? STRATEGIES[selectedReliability.strategy].name + " được chọn bằng validation rồi kiểm tra trên test chưa dùng để chọn." : "Không chiến lược nào đạt ngưỡng trên validation để được chọn."} P-value dùng kiểm định một phía so với random, SE Newey–West HAC (cửa sổ chồng, băng thông min(lookback-1, max(1, floor(n^(1/3))))), và hiệu chỉnh Holm-Bonferroni theo số giả thuyết / registry = {temporalReport.familySize} (family {familySummary?.familyId ?? "—"}; fallback {FALLBACK_HOLM_FAMILY_SIZE} nếu registry trống — familySize không tăng khi chỉ thêm kỳ/look mới). lookCount={temporalReport.lookCount}; alpha look hiện tại sau chi tiêu Pocock = {temporalReport.alpha} (nominal {temporalReport.nominalAlpha}). Đây là <strong>chia hồi cứu trên dữ liệu đã có sẵn</strong>: tập test là holdout theo nghĩa cơ học (không dùng để chọn), nhưng không bảo đảm chưa từng có người nhìn thấy. Chỉ các kỳ từ <code>{protocolLock?.prospectiveStartDrawId ?? "—"}</code> (protocol <code>{temporalReport.protocolVersion}</code>) mới là bằng chứng prospective.</span></p>
         </section>
 
-        <ExperimentScorecard protocolLock={protocolLock} familySummary={familySummary} draws={draws} />
+        <PanelErrorBoundary name="Experiment Scorecard">
+          <ExperimentScorecard protocolLock={protocolLock} familySummary={familySummary} draws={draws} />
+        </PanelErrorBoundary>
 
-        <Bao18Panel />
+        <PanelErrorBoundary name="Bao-18">
+          <Bao18Panel />
+        </PanelErrorBoundary>
 
-        <CapabilityInspector protocolLock={protocolLock} familySummary={familySummary} />
+        <PanelErrorBoundary name="Capability Inspector">
+          <CapabilityInspector protocolLock={protocolLock} familySummary={familySummary} />
+        </PanelErrorBoundary>
 
-        <DiagnosticsPanel />
+        <PanelErrorBoundary name="Diagnostics">
+          <DiagnosticsPanel />
+        </PanelErrorBoundary>
 
-        <DataExplorer draws={draws} />
+        <PanelErrorBoundary name="Data Explorer">
+          <DataExplorer draws={draws} />
+        </PanelErrorBoundary>
 
-        <ProfitLab />
+        <PanelErrorBoundary name="Profit Lab">
+          <ProfitLab />
+        </PanelErrorBoundary>
       </section>
 
       <aside className="research-side">
@@ -278,7 +303,31 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
             <div className={selected?.gates.stableAcrossHalves ? "gate-pass" : ""}><Check /> Ổn định hai nửa <span>{selected ? selected.firstHalfEdge.toFixed(2) + " / " + selected.secondHalfEdge.toFixed(2) : "—"}</span></div>
             <div className={selected?.gates.outperformsRandomPayout ? "gate-pass" : ""}><Check /> Trả thưởng bền đuôi hơn random <span>{selected && random ? formatVnd(selected.robustPayout - random.robustPayout) : "—"}</span></div>
           </div>
-          <div className="suggestion-balls">{suggestion.map((number) => <Ball key={number} number={number} />)}</div>
+          <div className="suggestion-reveal">
+            <Button
+              type="button"
+              variant="outline"
+              className="secondary-action"
+              aria-expanded={suggestionRevealed}
+              onClick={() => setSuggestionRevealed((current) => !current)}
+            >
+              {suggestionRevealed ? "Ẩn bộ số thử nghiệm" : "Hiển thị bộ số thử nghiệm"}
+            </Button>
+            {suggestionRevealed ? (
+              <>
+                <div className="suggestion-balls">{suggestion.map((number) => <Ball key={number} number={number} />)}</div>
+                <p className="suggestion-disclaimer" role="note">
+                  <AlertTriangle aria-hidden="true" />
+                  <span>Đây là output của một rule nghiên cứu, không phải dự đoán được xác nhận.</span>
+                </p>
+              </>
+            ) : (
+              <p className="suggestion-hidden-hint">
+                Bộ số cụ thể đang được ẩn để tránh thiên kiến tự động hoá (automation bias). Chiến lược, z-score và độ
+                ổn định ở trên vẫn hiển thị đầy đủ.
+              </p>
+            )}
+          </div>
           <p className="suggestion-warning">
             <strong>Khảo sát kỳ tiếp theo</strong> (minh họa) — cutoff dữ liệu #{suggestionCutoffId} / {suggestionCutoffDate};
             cửa sổ {CURRENT_PROTOCOL.lookback} kỳ đã công bố; loại bằng chứng: <em>không phải prospective scored</em>.

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DrawDataState } from "@/hooks/use-draw-data";
 import { analyzeContinuity } from "@/lib/data/continuity";
+import { assessFreshness } from "@/lib/data/freshness";
 import { CURRENT_PROTOCOL, classifyEvidence, type ProtocolLock } from "@/lib/research/protocol";
 import type { ExperimentFamilySummary } from "@/lib/research/experiments";
 import { spentAlphaForLook } from "@/lib/research/alpha-spending";
@@ -99,6 +100,10 @@ export function DataStatus({
   const manifest = state.manifest;
   const latestRecord = state.records.at(-1);
   const continuity = useMemo(() => analyzeContinuity(state.records), [state.records]);
+  const freshness = useMemo(
+    () => assessFreshness(manifest?.lastSuccessfulSync),
+    [manifest?.lastSuccessfulSync],
+  );
   const latestEvidence =
     latestRecord && protocolLock ? classifyEvidence(latestRecord.id, protocolLock) : null;
 
@@ -109,13 +114,30 @@ export function DataStatus({
           <p className="eyebrow">Nguồn dữ liệu</p>
           <h2 id="data-status-heading">Trạng thái bộ dữ liệu</h2>
         </div>
-        <Badge variant="outline" className={`data-status-badge data-status-${status.tone}`}>
-          {status.tone === "busy" ? <Loader2 className="spin" aria-hidden="true" /> : <Database aria-hidden="true" />}
-          {status.label}
-        </Badge>
+        <div className="data-status-badges">
+          <Badge
+            variant="outline"
+            className={`data-status-badge data-freshness-${freshness.label.toLowerCase()}`}
+            title={freshness.detailVi}
+          >
+            Độ tươi: {freshness.badgeVi}
+          </Badge>
+          <Badge variant="outline" className={`data-status-badge data-status-${status.tone}`}>
+            {status.tone === "busy" ? <Loader2 className="spin" aria-hidden="true" /> : <Database aria-hidden="true" />}
+            {status.label}
+          </Badge>
+        </div>
       </div>
 
+      <p className={`data-freshness-note data-freshness-${freshness.label.toLowerCase()}`} role="status">
+        {freshness.detailVi}
+      </p>
+
       <dl className="data-status-grid">
+        <div>
+          <dt>Độ tươi (Fresh / Delayed / Stale / Unknown)</dt>
+          <dd>{freshness.badgeVi}</dd>
+        </div>
         <div>
           <dt>Số kỳ hợp lệ</dt>
           <dd>{state.records.length.toLocaleString("vi-VN")}</dd>

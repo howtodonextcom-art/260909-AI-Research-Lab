@@ -80,11 +80,13 @@ export function ScientificVerdict({ protocolLock }: { protocolLock: ProtocolLock
           <small>Không đổi dù bạn chọn số nóng, số lạnh, số lâu chưa ra, hay bất kỳ chiến lược nào khác.</small>
         </div>
         <div>
-          <dt>Độ phủ danh mục (Portfolio)</dt>
-          <dd>Đã chứng minh bằng tổ hợp học</dd>
+          <dt>Lợi thế cấu trúc danh mục (Portfolio)</dt>
+          <dd>CÓ — nhỏ nhưng chính xác</dd>
           <small>
-            Toán tổ hợp/xác suất trong tab <strong>Portfolio 4+</strong> là phép tính chính xác, không phải dự đoán —
-            khác hẳn với việc dự đoán số nào sẽ ra.
+            Toán tổ hợp/xác suất trong tab <strong>Portfolio 4+</strong> là phép tính chính xác (không mô phỏng),
+            nhưng mức tăng thực tế so với chọn ngẫu nhiên cùng ngân sách là NHỎ — xem con số lift chính xác trong tab
+            Portfolio. Đây là lợi thế về độ phủ tổ hợp, không phải dự đoán số nào sẽ ra, và không làm tăng xác suất
+            Jackpot của từng vé.
           </small>
         </div>
         <div>

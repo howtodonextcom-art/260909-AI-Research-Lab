@@ -12,14 +12,24 @@
  *   that lands on different isolates (or any moderately distributed caller)
  *   is not slowed down by this at all. Real edge-level or cross-isolate
  *   rate limiting (e.g. Cloudflare's platform WAF rate-limiting rules) is
- *   out of scope here — see `docs/adr/ADR-005-persistence-local-vs-durable.md`
- *   for what would justify adding a durable, cross-isolate counter.
+ *   **operator-gated / BLOCKED_BY_REAL_WORLD_EVIDENCE** until a human with
+ *   live Cloudflare credentials configures and drills it — see
+ *   `docs/production-runbook.md` §8 and ADR-005.
  * - **Resets on cold start / redeploy.** State is an in-memory array, not a
  *   durable counter — a new isolate starts with a clean window.
  * - **A courtesy/abuse-deterrence measure, not a security control.** Its
  *   job is to blunt accidental request bursts (e.g. a buggy client retry
  *   loop) and to protect the official-fetch cache's upstream from a burst
  *   of concurrent misses — not to withstand a determined attacker.
+ *
+ * Complementary mitigations that ARE in this repo (still not distributed):
+ * - Client single-flight in `lib/data/refresh.ts` (`inFlight`) — concurrent
+ *   `refreshDataset` callers in one browser share one POST.
+ * - Server official-fetch cache + in-process single-flight in
+ *   `lib/data/official-fetch-cache.ts` — concurrent misses in one isolate
+ *   share one upstream vietlott.vn call; 12h TTL reduces repeat storms.
+ * Together these stop refresh *storms from a single client/isolate*; they
+ * do **not** replace platform WAF rate limiting across isolates.
  */
 
 export type RateLimitOptions = { windowMs: number; maxRequests: number };

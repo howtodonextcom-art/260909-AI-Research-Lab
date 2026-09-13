@@ -593,6 +593,26 @@ button.ball:hover { transform: translateY(-2px); border-color: rgba(255, 255, 25
 
 .data-status-badge { display: inline-flex; gap: 0.35rem; align-items: center; font-size: var(--fs-xs); }
 .data-status-badge svg { width: 13px; height: 13px; }
+.data-status-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
+.data-freshness-note { margin: 0 0 0.85rem; font-size: var(--fs-sm); color: var(--text-muted); }
+.data-freshness-fresh { color: var(--success); }
+.data-freshness-delayed { color: var(--warning); }
+.data-freshness-stale { color: var(--danger); }
+.data-freshness-unknown { color: var(--text-muted); }
+.panel-error-fallback { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.panel-error-detail { margin: 0.75rem 0; font-size: var(--fs-sm); }
+.panel-error-detail code { word-break: break-word; }
+.panel-error-retry {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+.panel-error-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .data-status-ok { color: var(--success); border-color: rgba(74, 222, 128, 0.35); }
 .data-status-busy { color: var(--warning); border-color: rgba(250, 204, 21, 0.35); }
 .data-status-warn { color: var(--warning); border-color: rgba(250, 204, 21, 0.35); }
@@ -658,6 +678,67 @@ button.ball:hover { transform: translateY(-2px); border-color: rgba(255, 255, 25
 }
 .scientific-verdict-capability-link:hover { color: var(--text); }
 .capability-inspector-card:target { outline: 2px solid var(--data-cold); outline-offset: 4px; }
+
+/* Sub-Agent C — sticky in-page nav (Round 6 §5 Variant A) + automation-bias toggle */
+.research-nav {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  margin: 0 0 1rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(8, 17, 31, 0.92);
+  backdrop-filter: blur(10px);
+  overflow-x: auto;
+}
+.research-nav ul { display: flex; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.research-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.research-nav a:hover { color: var(--text); border-color: var(--data-cold); }
+
+/* scroll-margin-top on real anchor targets so the sticky nav / topbar never
+   covers the heading a jump lands on. */
+#data-status-heading,
+#evidence-section,
+#bao18-panel-heading,
+#diagnostics-panel-heading,
+#capability-inspector,
+#data-explorer-heading {
+  scroll-margin-top: 5rem;
+}
+
+.suggestion-reveal { margin: 1rem 0; }
+.suggestion-hidden-hint { margin: 0.6rem 0 0; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.5; }
+.suggestion-disclaimer {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(250, 204, 21, 0.08);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.suggestion-disclaimer svg { width: 15px; flex: 0 0 auto; margin-top: 0.1rem; color: var(--warning); }
+
+@media (max-width: 620px) {
+  .research-nav { top: 0; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -9,14 +9,14 @@
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
     "dev": "node scripts/run-framework.mjs dev",
-    "build": "node scripts/run-framework.mjs build",
+    "build": "node scripts/run-framework.mjs build && node --import=tsx scripts/write-security-headers.mjs --dist",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && npm run test:discovery && npm run test:business && npm run data:test",
     "test:discovery": "node --import=tsx scripts/verify-test-discovery.ts",
-    "test:business": "node --import=tsx --test lib/mega645.test.ts lib/analytics.test.ts lib/analytics.replay-freeze.test.ts lib/profit.test.ts lib/portfolio.test.ts lib/research/statistics.test.ts lib/research/negative-controls.test.ts lib/research/controls-summary.test.ts lib/research/protocol.test.ts lib/research/experiments.test.ts lib/research/prospective.test.ts lib/research/prospective-summary.test.ts lib/research/provenance-registry.test.ts lib/research/alpha-spending.test.ts lib/research/portfolio-mc.test.ts lib/research/bao.test.ts lib/research/ranking-score.test.ts lib/research/features.test.ts lib/research/ablation.test.ts lib/research/ablation-summary.test.ts lib/research/portfolio-mc-summary.test.ts lib/research/bao18-walkforward.test.ts lib/research/bao18-summary.test.ts app/page.a11y.test.ts app/layout.fonts.test.ts app/ui-ranking-score-ban.contract.test.ts app/ui-explorer-scorecard.contract.test.ts app/ui-scientific-verdict-bao18.contract.test.ts app/diagnostics-panel.contract.test.ts components/data-status.contract.test.ts package.deploy.test.ts",
-    "data:test": "node --import=tsx --test lib/data/schema.test.ts lib/data/jsonl.test.ts lib/data/merge.test.ts lib/data/sync.test.ts lib/data/refresh.test.ts lib/data/official-fetch-cache.test.ts lib/data/rate-limit.test.ts lib/data/continuity.test.ts lib/data/cross-check.test.ts lib/data/sources/vietlott-official.test.ts lib/data/live-verification.test.ts lib/data/draw-data-state.test.ts lib/data/browser-cache.test.ts lib/data/report.test.ts lib/data/explorer.test.ts app/api/data/refresh/route.test.ts",
+    "test:business": "node --import=tsx --test lib/mega645.test.ts lib/analytics.test.ts lib/analytics.replay-freeze.test.ts lib/profit.test.ts lib/portfolio.test.ts lib/research/statistics.test.ts lib/research/negative-controls.test.ts lib/research/controls-summary.test.ts lib/research/protocol.test.ts lib/research/experiments.test.ts lib/research/prospective.test.ts lib/research/prospective-summary.test.ts lib/research/provenance-registry.test.ts lib/research/alpha-spending.test.ts lib/research/portfolio-mc.test.ts lib/research/bao.test.ts lib/research/exact-benchmark.test.ts lib/research/ranking-score.test.ts lib/research/features.test.ts lib/research/ablation.test.ts lib/research/ablation-summary.test.ts lib/research/portfolio-mc-summary.test.ts lib/research/bao18-walkforward.test.ts lib/research/bao18-summary.test.ts app/page.a11y.test.ts app/layout.fonts.test.ts app/ui-ranking-score-ban.contract.test.ts app/ui-explorer-scorecard.contract.test.ts app/ui-scientific-verdict-bao18.contract.test.ts app/diagnostics-panel.contract.test.ts app/ui-research-nav-automation-bias.contract.test.ts app/ui-error-boundary.contract.test.ts components/data-status.contract.test.ts package.deploy.test.ts",
+    "data:test": "node --import=tsx --test lib/data/schema.test.ts lib/data/jsonl.test.ts lib/data/merge.test.ts lib/data/sync.test.ts lib/data/refresh.test.ts lib/data/official-fetch-cache.test.ts lib/data/rate-limit.test.ts lib/data/freshness.test.ts lib/data/continuity.test.ts lib/data/cross-check.test.ts lib/data/sources/vietlott-official.test.ts lib/data/live-verification.test.ts lib/data/draw-data-state.test.ts lib/data/browser-cache.test.ts lib/data/report.test.ts lib/data/explorer.test.ts app/api/data/refresh/route.test.ts app/api/health/route.test.ts app/api/readiness/route.test.ts lib/observability/logger.test.ts lib/observability/readiness.test.ts lib/security/headers.test.ts scripts/audit-bao18-evidence-gate.test.ts",
     "data:sync": "node --import=tsx scripts/data-sync.ts",
     "data:check": "node --import=tsx scripts/data-check.ts",
     "data:status": "node --import=tsx scripts/data-status.ts",
@@ -37,7 +37,10 @@
     "research:prospective-summary": "node --import=tsx scripts/export-prospective-summary.ts",
     "research:bao18-audit": "node --import=tsx scripts/audit-bao18-walkforward.ts",
     "research:bao18-summary": "node --import=tsx scripts/export-bao18-summary.ts",
-    "research:verify-provenance": "node --import=tsx scripts/verify-provenance.ts"
+    "research:verify-provenance": "node --import=tsx scripts/verify-provenance.ts",
+    "e2e": "playwright test",
+    "e2e:ci": "playwright test --reporter=line",
+    "headers:write": "node --import=tsx scripts/write-security-headers.mjs"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",
@@ -52,6 +55,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "4.20260515.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

@@ -103,6 +103,40 @@ no public write API is planned (`DO_NOT_BUILD` explicitly excludes
 auth/billing/full SaaS), and the dataset (~1,561 records, well under a
 megabyte) fits comfortably in a bundled snapshot for the foreseeable future.
 
+## Round 7 re-evaluation (production hardening round)
+
+This round adds `/api/readiness` (`app/api/readiness/route.ts`,
+`lib/observability/readiness.ts`) and `/api/health`
+(`app/api/health/route.ts`) per §17 of the production master prompt.
+Re-checking this ADR's own trigger list against that addition:
+
+- **`/api/readiness` is read-only.** It fetches this app's own bundled
+  static assets (`/data/power645.jsonl`, `/data/power645.manifest.json`,
+  `/data/protocol-lock.json`, `/data/experiment-family.json` — the same
+  files `app/page.tsx` and `lib/data/refresh.ts` already fetch client-side)
+  and reports pass/fail. It writes nothing, anywhere, ever. It is not "a
+  genuine public write API" — the first trigger above — because it has no
+  write path at all.
+- **It adds no multi-writer coordination.** No new process appends to any
+  `reports/*.jsonl` file; the second trigger remains unmet.
+- **It holds no server-computed history the client cannot hold.** Every
+  value it reports is recomputed per-request from the same static assets
+  already shipped to the client; it caches nothing across requests
+  (`Cache-Control: no-store`) and needs no store larger than what the client
+  already holds. The third trigger remains unmet.
+- **`/api/health` is even simpler** — a static liveness response with no
+  dependency on data, dataset, or any store at all.
+
+Conclusion: **this ADR's decision is reaffirmed, unchanged.** No database,
+KV, D1, or R2 binding is needed to support either new endpoint. The
+structured logging added alongside these endpoints (`lib/observability/logger.ts`)
+also writes nothing durable — it only emits JSON lines to stdout/stderr for
+an external platform log pipeline to collect, which is explicitly out of
+scope for "persistence" as this ADR defines it (the log lines are not read
+back by this application). The trigger list in "What would change this
+decision" above is left exactly as it was; nothing in this round meets any
+of its three conditions.
+
 ## Consequences
 - Anyone auditing "where does data live" can point to exactly three answers
   (bundled snapshot, IndexedDB, `reports/` JSONL) and one narrow exception

@@ -51,3 +51,6 @@ next-env.d.ts
 
 # Browser-automation artifacts from local verification runs
 /.playwright-mcp/
+/test-results/
+/playwright-report/
+/blob-report/
