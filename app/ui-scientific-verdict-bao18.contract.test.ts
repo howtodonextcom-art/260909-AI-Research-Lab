@@ -129,3 +129,95 @@ test("CapabilityInspector không import lib/research/ranking-score (chỉ mô t�
   const source = readFileSync(capabilityInspectorPath, "utf8");
   assert.doesNotMatch(source, RANKING_SCORE_IMPORT);
 });
+
+// ---------------------------------------------------------------------------
+// 4. GAP-03 — Bao-18 panel completeness: EARLY/LATE stability,
+//    scientificSpecHash, theoretical null clarity, power/low-event warning.
+// ---------------------------------------------------------------------------
+
+test("Bao18Panel render bảng ổn định EARLY vs LATE dựa trên dữ liệu thật (row.early / row.late), không phải số bịa", () => {
+  const source = readFileSync(bao18PanelPath, "utf8");
+  assert.match(source, /row\.early/);
+  assert.match(source, /row\.late/);
+  assert.match(source, /EARLY.*LATE|EARLY \(nửa đầu\) vs LATE \(nửa sau\)/);
+});
+
+test("Bao18Panel render kỳ vọng null lý thuyết một cách rõ ràng (E[K] = 2,4) — không chôn trong caption", () => {
+  const source = readFileSync(bao18PanelPath, "utf8");
+  assert.match(source, /E\[K\] = 6 × 18 \/ 45 = 2,4/);
+  assert.match(source, /Kỳ vọng null lý thuyết/);
+});
+
+test("Bao18Panel giữ cảnh báo công suất thống kê (power \\/ low-event)", () => {
+  const source = readFileSync(bao18PanelPath, "utf8");
+  assert.match(source, /Cảnh báo công suất thống kê/);
+  assert.match(source, /NO_EVIDENCE_OF_EDGE/);
+});
+
+test("Bao18Panel render scientificSpecHash thật (không phải chuỗi cứng) kèm giải thích tái lập", () => {
+  const source = readFileSync(bao18PanelPath, "utf8");
+  assert.match(source, /summary\.scientificSpecHash/);
+  assert.match(source, /scientificSpecHash/);
+  assert.match(source, /tái lập|reproducibility/i);
+});
+
+test("Bao18Panel không dùng Protocol A (100% hit) làm bằng chứng edge — vẫn giữ nguyên câu kết luận bắt buộc sau khi mở rộng", () => {
+  const source = readFileSync(bao18PanelPath, "utf8");
+  assert.match(
+    source,
+    /Reverse-peek có thể trông hoàn hảo vì nó rò rỉ đáp án\. Walk-forward hợp lệ hiện chưa cho thấy edge dự đoán nào được chứng minh\./,
+  );
+  assert.doesNotMatch(source, BANNED_CTA_PHRASES);
+});
+
+// ---------------------------------------------------------------------------
+// 5. GAP-04 — Prospective hash-chain health surfaced in Experiment Scorecard,
+//    sourced from the real fetched JSON (chainHealth), never a hardcoded
+//    "0 SCORED" magic string standing in for real data.
+// ---------------------------------------------------------------------------
+
+const scorecardPath = path.join(repoRoot, "components", "experiment-scorecard.tsx");
+
+test("components/experiment-scorecard.tsx tồn tại", () => {
+  assert.ok(existsSync(scorecardPath));
+});
+
+test("ExperimentScorecard render chain-health TỪ summary.chainHealth (dữ liệu fetch thật), không phải chuỗi cứng", () => {
+  const source = readFileSync(scorecardPath, "utf8");
+  assert.match(source, /summary\.chainHealth\.chainedCount/);
+  assert.match(source, /summary\.chainHealth\.legacyCount/);
+  assert.match(source, /summary\.chainHealth\.verified/);
+  assert.match(source, /LEGACY_UNCHAINED/);
+});
+
+test("self-check: nếu ai đó thay bằng chuỗi cứng '0 sự kiện đã chain' thay vì đọc summary.chainHealth, test trên phải fail", () => {
+  const hardcoded = 'const line = "0 sự kiện đã chain, 4 sự kiện LEGACY";';
+  assert.doesNotMatch(hardcoded, /summary\.chainHealth\.chainedCount/);
+});
+
+test("ExperimentScorecard không import hàm freeze/append (vẫn read-only sau khi thêm chain-health)", () => {
+  const source = readFileSync(scorecardPath, "utf8");
+  assert.doesNotMatch(source, /freezeProspectivePrediction|appendProspectiveResult/);
+});
+
+// ---------------------------------------------------------------------------
+// 6. GAP-05 — Capability Inspector discoverability: stable id + anchor link
+//    from Scientific Verdict, reachable by keyboard (native <a href="#...">
+//    and <summary> are both natively focusable — no custom tabindex hacks
+//    needed, which is exactly why Option A was chosen over a new tab).
+// ---------------------------------------------------------------------------
+
+test("CapabilityInspector có id ổn định 'capability-inspector' để làm mục tiêu anchor", () => {
+  const source = readFileSync(capabilityInspectorPath, "utf8");
+  assert.match(source, /id="capability-inspector"/);
+});
+
+test("ScientificVerdict có link neo tới #capability-inspector (một thẻ <a> gốc — luôn focusable bằng bàn phím)", () => {
+  const source = readFileSync(scientificVerdictPath, "utf8");
+  assert.match(source, /<a\s+className="scientific-verdict-capability-link"\s+href="#capability-inspector">/);
+});
+
+test("self-check: nếu link trỏ sai id, test trên phải fail", () => {
+  const wrong = '<a className="scientific-verdict-capability-link" href="#something-else">';
+  assert.doesNotMatch(wrong, /href="#capability-inspector"/);
+});

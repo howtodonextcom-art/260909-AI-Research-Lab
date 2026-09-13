@@ -20,8 +20,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseProspectiveScorecard } from "../lib/research/prospective";
-import { buildProspectiveSummary } from "../lib/research/prospective-summary";
+import { parseProspectiveLedger, deriveProspectiveStatus, verifyProspectiveChain } from "../lib/research/prospective";
+import { buildProspectiveSummary, deriveChainHealth } from "../lib/research/prospective-summary";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const scorecardPath = path.join(projectRoot, "reports", "prospective-scorecard.jsonl");
@@ -37,17 +37,36 @@ async function readTextIfPresent(filePath: string): Promise<string> {
 }
 
 const text = await readTextIfPresent(scorecardPath);
-const { entries, issues } = parseProspectiveScorecard(text);
+const { lines, issues } = parseProspectiveLedger(text);
 if (issues.length) {
   console.error(`Scorecard hỏng: ${issues.length} dòng lỗi. Ví dụ (dòng ${issues[0].line}): ${issues[0].reason}`);
   process.exit(1);
 }
 
-const summary = buildProspectiveSummary(entries);
+// GAP-04: derive real hash-chain health (chained vs LEGACY_UNCHAINED count,
+// verification PASS/fail) from the actual ledger via
+// `verifyProspectiveChain` — never fabricated or rounded to look more
+// "finished". As of this writing the real state is 4 LEGACY_UNCHAINED
+// entries (frozen before the hash chain existed) and 0 chained events.
+const entries = deriveProspectiveStatus(lines);
+const chainResult = verifyProspectiveChain(lines);
+const chainHealth = deriveChainHealth(chainResult);
+if (!chainHealth.verified) {
+  console.error(
+    `Chuỗi hash prospective KHÔNG hợp lệ (${chainHealth.violationCount} vi phạm) — từ chối xuất summary (fail-closed). ` +
+      "Chạy `npm run research:verify-provenance` để xem chi tiết vi phạm.",
+  );
+  process.exit(1);
+}
+
+const summary = buildProspectiveSummary(entries, chainHealth);
 
 await mkdir(path.dirname(outPath), { recursive: true });
 await writeFile(outPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 
 console.log("ĐÃ XUẤT PROSPECTIVE SUMMARY");
 console.log(`  entries đóng băng: ${summary.totalFrozen} (pending=${summary.pendingCount}, scored=${summary.scoredCount})`);
+console.log(
+  `  chuỗi hash:        ${chainHealth.chainedCount} đã chain, ${chainHealth.legacyCount} LEGACY_UNCHAINED, xác minh=${chainHealth.verified ? "PASS" : "FAIL"}`,
+);
 console.log(`  file:              ${path.relative(projectRoot, outPath)}`);

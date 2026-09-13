@@ -15,9 +15,36 @@
  * `public/data/prospective-summary.json`, mirroring how `research-lock.ts`
  * already publishes `protocol-lock.json` under `public/data/`.
  */
-import type { ProspectiveEntry } from "./prospective";
+import type { ProspectiveChainResult, ProspectiveEntry } from "./prospective";
 
 export type ProspectiveEntryStatus = "PENDING" | "SCORED";
+
+/**
+ * Read-only, UI-safe view of the hash-chain health computed by
+ * `verifyProspectiveChain` (GAP-04): how many ledger lines are chained
+ * (tamper-evident FROZEN/SCORED events) vs `LEGACY_UNCHAINED` (the 4 real
+ * entries frozen before the hash chain existed, honestly reported as such —
+ * never retroactively counted as chained), and whether verification passed.
+ * `violationCount` is included (not the raw violation strings, which may
+ * contain internal detail) so the UI can show a fail reason exists without
+ * having to interpret free-text.
+ */
+export type ProspectiveChainHealth = {
+  chainedCount: number;
+  legacyCount: number;
+  verified: boolean;
+  violationCount: number;
+};
+
+/** Pure mapping from `verifyProspectiveChain`'s result to the UI-safe shape — no fs, no re-derivation of chain logic. */
+export function deriveChainHealth(chainResult: ProspectiveChainResult): ProspectiveChainHealth {
+  return {
+    chainedCount: chainResult.chainedCount,
+    legacyCount: chainResult.legacyCount,
+    verified: chainResult.ok,
+    violationCount: chainResult.violations.length,
+  };
+}
 
 export type ProspectiveSummaryEntry = {
   drawId: string;
@@ -34,6 +61,7 @@ export type ProspectiveSummary = {
   pendingCount: number;
   scoredCount: number;
   entries: ProspectiveSummaryEntry[];
+  chainHealth: ProspectiveChainHealth;
 };
 
 const STRATEGY_IDS: ProspectiveEntry["strategyId"][] = ["RANDOM", "HOT", "COLD", "BALANCED"];
@@ -57,6 +85,7 @@ function toSummaryEntry(entry: ProspectiveEntry): ProspectiveSummaryEntry {
  */
 export function buildProspectiveSummary(
   entries: ProspectiveEntry[],
+  chainHealth: ProspectiveChainHealth,
   now: () => Date = () => new Date(),
 ): ProspectiveSummary {
   const summaryEntries = entries
@@ -70,6 +99,7 @@ export function buildProspectiveSummary(
     pendingCount: summaryEntries.filter((entry) => entry.status === "PENDING").length,
     scoredCount: summaryEntries.filter((entry) => entry.status === "SCORED").length,
     entries: summaryEntries,
+    chainHealth,
   };
 }
 
@@ -87,6 +117,19 @@ export function parseProspectiveSummary(value: unknown): ProspectiveSummary | nu
   if (typeof raw.pendingCount !== "number" || !Number.isFinite(raw.pendingCount) || raw.pendingCount < 0) return null;
   if (typeof raw.scoredCount !== "number" || !Number.isFinite(raw.scoredCount) || raw.scoredCount < 0) return null;
   if (!Array.isArray(raw.entries)) return null;
+
+  if (!raw.chainHealth || typeof raw.chainHealth !== "object") return null;
+  const ch = raw.chainHealth as Record<string, unknown>;
+  if (typeof ch.chainedCount !== "number" || !Number.isFinite(ch.chainedCount) || ch.chainedCount < 0) return null;
+  if (typeof ch.legacyCount !== "number" || !Number.isFinite(ch.legacyCount) || ch.legacyCount < 0) return null;
+  if (typeof ch.verified !== "boolean") return null;
+  if (typeof ch.violationCount !== "number" || !Number.isFinite(ch.violationCount) || ch.violationCount < 0) return null;
+  const chainHealth: ProspectiveChainHealth = {
+    chainedCount: Math.floor(ch.chainedCount),
+    legacyCount: Math.floor(ch.legacyCount),
+    verified: ch.verified,
+    violationCount: Math.floor(ch.violationCount),
+  };
 
   const entries: ProspectiveSummaryEntry[] = [];
   for (const item of raw.entries) {
@@ -114,5 +157,6 @@ export function parseProspectiveSummary(value: unknown): ProspectiveSummary | nu
     pendingCount: Math.floor(raw.pendingCount),
     scoredCount: Math.floor(raw.scoredCount),
     entries,
+    chainHealth,
   };
 }

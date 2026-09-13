@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-13T04:35:45.547Z",
+  "generatedAt": "2026-09-13T10:18:55.087Z",
   "totalFrozen": 4,
   "pendingCount": 4,
   "scoredCount": 0,
@@ -36,5 +36,11 @@
       "matches": null,
       "tier": null
     }
-  ]
+  ],
+  "chainHealth": {
+    "chainedCount": 0,
+    "legacyCount": 4,
+    "verified": true,
+    "violationCount": 0
+  }
 }

@@ -54,6 +54,8 @@ function validSummary(overrides: Partial<Record<string, unknown>> = {}) {
     },
     finalVerdict: "NO_EDGE",
     scientificGrade: "C — NO DEMONSTRATED EDGE",
+    scientificSpecHash: "254bafef1c4ed187bd3e14e37ca5188dc01ba7bcf951db2359db62e1f81963be",
+    buildProvenance: { generatedAt: "2026-09-13T06:59:17.606Z", gitHeadShort: "4e800aa25" },
     ...overrides,
   };
 }
@@ -114,4 +116,44 @@ test("parseBao18Summary trả null cho giá trị không phải object", () => {
 test("parseBao18Summary trả null khi finalVerdict/scientificGrade không phải string", () => {
   assert.equal(parseBao18Summary(validSummary({ finalVerdict: 1 })), null);
   assert.equal(parseBao18Summary(validSummary({ scientificGrade: null })), null);
+});
+
+test("parseBao18Summary đọc scientificSpecHash + buildProvenance khi có", () => {
+  const parsed = parseBao18Summary(validSummary());
+  assert.equal(parsed?.scientificSpecHash, "254bafef1c4ed187bd3e14e37ca5188dc01ba7bcf951db2359db62e1f81963be");
+  assert.deepEqual(parsed?.buildProvenance, { generatedAt: "2026-09-13T06:59:17.606Z", gitHeadShort: "4e800aa25" });
+});
+
+test("parseBao18Summary chấp nhận scientificSpecHash/buildProvenance thiếu hoặc null (báo cáo cũ hơn trường này)", () => {
+  const raw = validSummary() as Record<string, unknown>;
+  delete raw.scientificSpecHash;
+  delete raw.buildProvenance;
+  const parsed = parseBao18Summary(raw);
+  assert.ok(parsed);
+  assert.equal(parsed?.scientificSpecHash, null);
+  assert.equal(parsed?.buildProvenance, null);
+
+  const parsedExplicitNull = parseBao18Summary(validSummary({ scientificSpecHash: null, buildProvenance: null }));
+  assert.ok(parsedExplicitNull);
+  assert.equal(parsedExplicitNull?.scientificSpecHash, null);
+});
+
+test("parseBao18Summary đọc early/late stability trên mỗi rule row, chấp nhận null khi báo cáo cũ không có", () => {
+  const ruleWithStability = validRuleRow({
+    early: { n: 735, meanK: 2.39, hit6Count: 3, hit6Rate: 0.0041 },
+    late: { n: 736, meanK: 2.39, hit6Count: 1, hit6Rate: 0.0014 },
+  });
+  const parsed = parseBao18Summary(validSummary({ protocolB: { evaluatedCount: 1471, rules: [ruleWithStability] } }));
+  assert.ok(parsed);
+  assert.deepEqual(parsed?.protocolB.rules[0]?.early, { n: 735, meanK: 2.39, hit6Count: 3, hit6Rate: 0.0041 });
+  assert.deepEqual(parsed?.protocolB.rules[0]?.late, { n: 736, meanK: 2.39, hit6Count: 1, hit6Rate: 0.0014 });
+
+  const parsedNoStability = parseBao18Summary(validSummary());
+  assert.equal(parsedNoStability?.protocolB.rules[0]?.early, null);
+  assert.equal(parsedNoStability?.protocolB.rules[0]?.late, null);
+});
+
+test("parseBao18Summary trả null khi early/late có shape hỏng (không phải null/undefined nhưng thiếu trường)", () => {
+  const badRow = validRuleRow({ early: { n: 735 } });
+  assert.equal(parseBao18Summary(validSummary({ protocolB: { evaluatedCount: 1471, rules: [badRow] } })), null);
 });

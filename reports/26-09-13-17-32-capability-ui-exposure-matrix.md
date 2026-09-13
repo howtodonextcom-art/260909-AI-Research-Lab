@@ -1,0 +1,25 @@
+# Capability → UI Exposure Matrix — Round 5 (supersedes Round 4's version)
+
+| Capability | Source module | Active call path | UI location | Exposure class | Tests | Runtime verified |
+|---|---|---|---|---|---|---|
+| Protocol lock | `lib/research/protocol.ts`, `scripts/research-lock.ts` | `research:lock` CLI | "Trạng thái bộ dữ liệu" panel + Capability Inspector | END_TO_END | `protocol.test.ts` | Yes |
+| Protocol history | `lib/research/protocol.ts` | `research-lock.ts` appends | Verifier-internal only | READ_ONLY | `protocol.test.ts` | Yes |
+| Experiment registry (identity now binds protocolHash) | `lib/research/experiments.ts`, `scripts/run-experiment.ts` | `research:experiment` CLI | "Sổ điểm thực nghiệm" + Capability Inspector | READ_ONLY | `experiments.test.ts` (+8 new GAP-02 tests) | Yes — live re-run, byte-identical, no double-registration |
+| Provenance verifier | `lib/research/provenance-registry.ts`, `scripts/verify-provenance.ts` | `research:verify-provenance` CLI, CI | Capability Inspector (status only, CLI-only by design) | OPERATOR_GATED | `provenance-registry.test.ts` | Yes |
+| Prospective freeze/append + hash chain | `lib/research/prospective.ts`, `scripts/research-prospective.ts` | CLI | Chain-health line in "Sổ điểm thực nghiệm" (**new this round**: real chained/legacy counts + verified status) | **UPGRADED**: OPERATOR_GATED (mutation) → the read-only chain STATUS is now `READ_ONLY` in the UI, mutation itself stays `OPERATOR_GATED` by design | `prospective.test.ts`, `prospective-summary.test.ts` | Yes — real values (0 chained, 4 legacy, PASS) match CLI output exactly |
+| Bao-18 reverse-proof audit | `lib/research/bao18-walkforward.ts`, `scripts/audit-bao18-walkforward.ts` | `research:bao18-audit` → `research:bao18-summary` | Bao-18 panel — **now includes** EARLY/LATE stability, unmissable null callout, power warning, `scientificSpecHash` | READ_ONLY | `bao18-walkforward.test.ts` (evidence-gate independently re-attacked this round), `bao18-summary.test.ts` | Yes — live audit, live gate re-attack, browser-confirmed |
+| **Ablation harness** | `lib/research/ablation.ts` | **New**: `research:ablation-summary` CLI | **New this round**: real numbers in the Diagnostics panel (previously CLI-status-text only) | **UPGRADED: OPERATOR_GATED → READ_ONLY** — this is the change that retires the Round 4 hard cap | `ablation-summary.test.ts` (new, 8 tests) | Yes — real per-strategy Holm-sensitivity numbers confirmed in browser |
+| **Portfolio Monte Carlo** | `lib/research/portfolio-mc.ts` | **New**: `research:portfolio-mc-summary` CLI | **New this round**: real numbers in the Diagnostics panel | **UPGRADED: OPERATOR_GATED → READ_ONLY** | `portfolio-mc-summary.test.ts` (new, 6 tests) | Yes — real n=10/20/30 mean-best-match/hit-rate numbers confirmed in browser |
+| Negative controls A–F | `lib/research/negative-controls.ts`, `controls-summary.ts` | `research:controls` CLI + client-side | "Sổ điểm thực nghiệm" | READ_ONLY | pre-existing | Yes (unchanged) |
+| Ranking Score scaffold | `lib/research/ranking-score.ts` | None (never called) | Capability Inspector, explicit non-promoted framing | STUB_NOT_PROMOTED | contract-test-enforced zero imports | Yes — re-confirmed via grep this round |
+| Data provenance / dataset hash | `lib/data/*` | `data:check`, `data:sync` | "Trạng thái bộ dữ liệu" | END_TO_END | `data:test` (143 tests) | Yes |
+| Data Explorer | `lib/data/explorer.ts` | Client-side filter | Research tab | END_TO_END | `explorer.test.ts` | Yes — typed a real draw id, got the correct row |
+| Bao-N cost frontier | `lib/research/bao.ts` | Client-side | Portfolio tab | END_TO_END | `bao.test.ts` | Yes |
+| Ticket Simulator | `lib/mega645.ts` | Client-side `crypto.getRandomValues` | Ticket tab | END_TO_END | `mega645.test.ts` | Yes — exercised end-to-end this round (Chọn nhanh → Mô phỏng kỳ quay) |
+| Scientific Verdict | `components/scientific-verdict.tsx` | Client-side | Research tab, rendered first | END_TO_END | contract test | Yes |
+| Capability Inspector | `components/capability-inspector.tsx` | Static + props | Research tab, **now with stable `id` + anchor link from Scientific Verdict** | READ_ONLY | contract test | Yes — anchor navigation + keyboard reachability confirmed this round |
+| Diagnostics panel (Ablation + Portfolio-MC) | `components/diagnostics-panel.tsx` (new) | Client-side fetch of 2 new static JSONs | Research tab, below Capability Inspector | READ_ONLY | `app/diagnostics-panel.contract.test.ts` (new, 6 tests) | Yes |
+
+## Hard-cap status this round
+
+**"Meaningful capability absent from substantive UI exposure" no longer applies.** Every capability in this matrix now resolves to `END_TO_END`, `READ_ONLY`, `OPERATOR_GATED` (only for genuinely CLI-only *mutation*, e.g. prospective freeze/append, provenance verification — never for *viewing* results), or `STUB_NOT_PROMOTED` (Ranking Score, correctly). No row is `CLI_ONLY`/`ENGINE_ONLY`/`UNKNOWN` for anything that has real output a browser user would want to see.

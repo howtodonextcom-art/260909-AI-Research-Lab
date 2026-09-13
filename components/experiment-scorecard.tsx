@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FlaskConical, Hourglass } from "lucide-react";
+import { AlertTriangle, FlaskConical, Hourglass, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { STRATEGIES, type DrawRecord } from "@/lib/analytics";
@@ -131,6 +131,27 @@ export function ExperimentScorecard({
             </div>
           ))}
         </div>
+      ) : null}
+
+      {summary ? (
+        <p className="method-note chain-health-note" role="status">
+          <Link2 aria-hidden="true" />
+          <span>
+            <strong>Chuỗi hash prospective (GAP-04):</strong> {summary.chainHealth.chainedCount} sự kiện đã chain
+            (tamper-evident) · {summary.chainHealth.legacyCount} sự kiện LEGACY_UNCHAINED (đóng băng trước khi có hash
+            chain, không được gán hash hồi tố) — xác minh:{" "}
+            <Badge
+              variant="outline"
+              className={"verdict " + (summary.chainHealth.verified ? "verdict-verified" : "verdict-no_edge")}
+            >
+              {summary.chainHealth.verified
+                ? "PASS"
+                : `FAIL (${summary.chainHealth.violationCount} vi phạm)`}
+            </Badge>{" "}
+            . Các sự kiện SCORED thật sẽ chỉ xuất hiện sau khi kỳ thật (từ #
+            {protocolLock?.prospectiveStartDrawId ?? "—"}) diễn ra — hiện chưa có sự kiện SCORED nào.
+          </span>
+        </p>
       ) : null}
 
       {fetchState === "loading" ? (

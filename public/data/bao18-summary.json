@@ -34,7 +34,19 @@
         "hit4PlusRate": 0.16043507817811012,
         "hit5PlusRate": 0.027192386131883073,
         "verdict": null,
-        "reasons": []
+        "reasons": [],
+        "early": {
+          "n": 735,
+          "meanK": 2.3918367346938774,
+          "hit6Count": 3,
+          "hit6Rate": 0.004081632653061225
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.385869565217391,
+          "hit6Count": 1,
+          "hit6Rate": 0.001358695652173913
+        }
       },
       {
         "rule": "HOT18",
@@ -52,7 +64,19 @@
         "reasons": [
           "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
           "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
-        ]
+        ],
+        "early": {
+          "n": 735,
+          "meanK": 2.4299319727891158,
+          "hit6Count": 1,
+          "hit6Rate": 0.0013605442176870747
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.3777173913043477,
+          "hit6Count": 0,
+          "hit6Rate": 0
+        }
       },
       {
         "rule": "COLD18",
@@ -70,7 +94,19 @@
         "reasons": [
           "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
           "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
-        ]
+        ],
+        "early": {
+          "n": 735,
+          "meanK": 2.361904761904762,
+          "hit6Count": 1,
+          "hit6Rate": 0.0013605442176870747
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.426630434782609,
+          "hit6Count": 3,
+          "hit6Rate": 0.004076086956521739
+        }
       },
       {
         "rule": "OVERDUE18",
@@ -88,7 +124,19 @@
         "reasons": [
           "không có lift dương so với null lý thuyết",
           "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)"
-        ]
+        ],
+        "early": {
+          "n": 735,
+          "meanK": 2.3510204081632655,
+          "hit6Count": 1,
+          "hit6Rate": 0.0013605442176870747
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.380434782608696,
+          "hit6Count": 1,
+          "hit6Rate": 0.001358695652173913
+        }
       },
       {
         "rule": "BALANCED18",
@@ -106,7 +154,19 @@
         "reasons": [
           "Holm-adjusted p-value không <= alpha (hoặc không được tính do family rỗng)",
           "hướng effect đảo dấu giữa EARLY và LATE — không ổn định theo thời gian"
-        ]
+        ],
+        "early": {
+          "n": 735,
+          "meanK": 2.453061224489796,
+          "hit6Count": 2,
+          "hit6Rate": 0.0027210884353741495
+        },
+        "late": {
+          "n": 736,
+          "meanK": 2.3519021739130435,
+          "hit6Count": 1,
+          "hit6Rate": 0.001358695652173913
+        }
       }
     ]
   },
@@ -120,5 +180,10 @@
     "underpowered": true
   },
   "finalVerdict": "NO_EDGE",
-  "scientificGrade": "C — NO DEMONSTRATED EDGE"
+  "scientificGrade": "C — NO DEMONSTRATED EDGE",
+  "scientificSpecHash": "254bafef1c4ed187bd3e14e37ca5188dc01ba7bcf951db2359db62e1f81963be",
+  "buildProvenance": {
+    "generatedAt": "2026-09-13T06:59:17.606Z",
+    "gitHeadShort": "4e800aa255e8"
+  }
 }

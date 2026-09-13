@@ -624,13 +624,40 @@ button.ball:hover { transform: translateY(-2px); border-color: rgba(255, 255, 25
 .bao18-protocol-block h3 { margin: 0; font-size: var(--fs-base); font-weight: 700; }
 .bao18-invalid-badge { border-color: rgba(248, 113, 113, 0.4) !important; color: var(--danger) !important; font-weight: 700; white-space: normal; }
 .bao18-verdict-list { display: grid; gap: 0.55rem; margin: 1rem 0 0; }
+.bao18-stability-block { margin-top: 1.25rem; padding-top: 1.1rem; border-top: 1px solid var(--border); }
+.bao18-stability-block h3 { margin: 0 0 0.5rem; font-size: var(--fs-base); font-weight: 700; }
+.bao18-theoretical-null-callout,
+.bao18-spec-hash-note {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(56, 189, 248, 0.06);
+}
 
-.capability-inspector-card { padding: 1.75rem; }
+.capability-inspector-card { padding: 1.75rem; scroll-margin-top: 6rem; }
 .capability-inspector-summary { display: flex; gap: 0.75rem; align-items: center; cursor: pointer; list-style: none; }
 .capability-inspector-summary::-webkit-details-marker { display: none; }
 .capability-inspector-summary svg { width: 20px; flex: 0 0 auto; color: var(--data-cold); }
 .capability-list { display: grid; gap: 0.55rem; margin: 1rem 0 0; }
 .capability-row small { line-height: 1.55; }
+
+/* GAP-05: minimal in-page discoverability link from the Scientific Verdict
+   panel to the Capability Inspector (kept inside Research, not promoted to a
+   new top-level tab — see components/scientific-verdict.tsx header comment).
+   scroll-margin-top above keeps the fixed topbar from covering the target
+   heading after the jump; :target below gives a brief visible confirmation
+   that the jump landed, on top of the browser's own scroll. */
+.scientific-verdict-capability-link {
+  display: inline-block;
+  margin-top: 1rem;
+  color: var(--data-cold);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.scientific-verdict-capability-link:hover { color: var(--text); }
+.capability-inspector-card:target { outline: 2px solid var(--data-cold); outline-offset: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

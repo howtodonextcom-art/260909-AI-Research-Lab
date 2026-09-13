@@ -25,6 +25,11 @@ function formatP(value: number | null): string {
   return value < 0.001 ? "<0.001" : value.toFixed(3);
 }
 
+function formatTimestamp(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("vi-VN");
+}
+
 /**
  * Bao-18 reverse-proof read-only panel (Master Prompt v2.0 exposure): fetches
  * the compact `public/data/bao18-summary.json` published by
@@ -179,18 +184,106 @@ export function Bao18Panel() {
                 ))}
             </div>
 
+            {(() => {
+              const stabilityRows = summary.protocolB.rules.filter((row) => row.early && row.late);
+              if (stabilityRows.length === 0) return null;
+              return (
+                <div className="bao18-stability-block">
+                  <div className="section-heading">
+                    <h3 id="bao18-stability-heading">Ổn định theo thời gian: EARLY (nửa đầu) vs LATE (nửa sau)</h3>
+                  </div>
+                  <p className="table-hint">
+                    Chia đôi các kỳ được đánh giá walk-forward thành nửa đầu (EARLY) và nửa sau (LATE) theo thời gian.
+                    Một hiệu ứng thật nên giữ hướng tương tự ở cả hai nửa; hướng đảo dấu là dấu hiệu nhiễu ngẫu nhiên,
+                    không phải lợi thế ổn định. Bảng rộng có thể cuộn ngang trên màn hình nhỏ.
+                  </p>
+                  <div className="table-wrap" tabIndex={0} aria-describedby="bao18-stability-heading">
+                    <Table>
+                      <TableCaption>TB số trùng (K) và tỉ lệ trúng 6/6 theo từng nửa lịch sử, mỗi luật.</TableCaption>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Luật</TableHead>
+                          <TableHead>n (EARLY)</TableHead>
+                          <TableHead>TB K (EARLY)</TableHead>
+                          <TableHead>Hit 6/6 (EARLY)</TableHead>
+                          <TableHead>n (LATE)</TableHead>
+                          <TableHead>TB K (LATE)</TableHead>
+                          <TableHead>Hit 6/6 (LATE)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {stabilityRows.map((row) => (
+                          <TableRow key={row.rule}>
+                            <TableCell>{RULE_LABELS[row.rule] ?? row.rule}</TableCell>
+                            <TableCell>{row.early!.n.toLocaleString("vi-VN")}</TableCell>
+                            <TableCell>{row.early!.meanK.toFixed(3)}</TableCell>
+                            <TableCell>
+                              {row.early!.hit6Count} ({pct(row.early!.hit6Rate)})
+                            </TableCell>
+                            <TableCell>{row.late!.n.toLocaleString("vi-VN")}</TableCell>
+                            <TableCell>{row.late!.meanK.toFixed(3)}</TableCell>
+                            <TableCell>
+                              {row.late!.hit6Count} ({pct(row.late!.hit6Rate)})
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <p className="method-note bao18-theoretical-null-callout">
+              <FlaskConical aria-hidden="true" />
+              <span>
+                <strong>Kỳ vọng null lý thuyết (không phụ thuộc dữ liệu):</strong> với một pool 18 số bất kỳ trong 45
+                số và kỳ quay 6 số, số lượng trùng trung bình theo lý thuyết là{" "}
+                <strong>E[K] = 6 × 18 / 45 = 2,4</strong>. Mọi giá trị &quot;TB số trùng&quot; quan sát được ở trên đều
+                dao động quanh 2,4 — đúng như một trò chơi công bằng, không có luật nào vượt trội thấy rõ.
+                {summary.math ? (
+                  <>
+                    {" "}
+                    Xác suất trúng 6/6 lý thuyết cho một pool 18 số cố định (đối chứng null) là{" "}
+                    <strong>{summary.math.nullJackpotProbability.toExponential(3)}</strong>.
+                  </>
+                ) : null}
+              </span>
+            </p>
+
             {summary.nullCalibration ? (
               <p className="method-note">
                 <AlertTriangle aria-hidden="true" />
                 <span>
-                  Cảnh báo hiệu năng thống kê: kỳ vọng số lần trúng 6/6 theo null lý thuyết chỉ là{" "}
-                  {summary.nullCalibration.nullExpectedCount.toFixed(2)}
+                  <strong>Cảnh báo công suất thống kê (power / low-event):</strong> kỳ vọng số lần trúng 6/6 theo null
+                  lý thuyết chỉ là {summary.nullCalibration.nullExpectedCount.toFixed(2)}
                   {summary.nullCalibration.nullPredictiveInterval95
                     ? ` (khoảng dự đoán 95%: ${summary.nullCalibration.nullPredictiveInterval95[0]}–${summary.nullCalibration.nullPredictiveInterval95[1]})`
                     : ""}
-                  {" "}— con số quá nhỏ để phân biệt một lợi thế vừa phải với nhiễu ngẫu nhiên. Kết luận NO_EDGE hôm
-                  nay phản ánh &quot;chưa quan sát được lợi thế&quot;, không phải &quot;đã chứng minh không có lợi
-                  thế nào tồn tại&quot;.
+                  {" "}— con số quá nhỏ để phân biệt một lợi thế vừa phải với nhiễu ngẫu nhiên (dataset có thể quá
+                  ngắn để có đủ công suất thống kê phát hiện một hiệu ứng nhỏ, nếu có). Kết luận NO_EDGE hôm nay phản
+                  ánh &quot;chưa quan sát được lợi thế&quot; (NO_EVIDENCE_OF_EDGE), không phải &quot;đã chứng minh
+                  không có lợi thế nào tồn tại&quot; (không phải EVIDENCE_OF_NO_EDGE).
+                </span>
+              </p>
+            ) : null}
+
+            {summary.scientificSpecHash ? (
+              <p className="method-note bao18-spec-hash-note">
+                <ShieldAlert aria-hidden="true" />
+                <span>
+                  <strong>Mã định danh phép kiểm định (scientificSpecHash):</strong>{" "}
+                  <code>{summary.scientificSpecHash.slice(0, 16)}…</code> — hash này định danh chính xác luật/lookback/
+                  seed/cửa sổ đánh giá đã tạo ra báo cáo này. Chạy lại đúng CLI kiểm định trên cùng bộ dữ liệu phải cho
+                  ra cùng hash — dùng để xác minh khả năng tái lập (reproducibility), không phải một tuyên bố khoa
+                  học.
+                  {summary.buildProvenance ? (
+                    <>
+                      {" "}
+                      Sinh lúc {formatTimestamp(summary.buildProvenance.generatedAt)}
+                      {summary.buildProvenance.gitHeadShort ? ` từ commit ${summary.buildProvenance.gitHeadShort}` : ""}.
+                    </>
+                  ) : null}
                 </span>
               </p>
             ) : null}

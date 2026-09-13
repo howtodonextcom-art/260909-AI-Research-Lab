@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-13T10:15:31.778Z",
+  "datasetHash": "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e",
+  "datasetRecordCount": 1561,
+  "lookback": 90,
+  "alpha": 0.05,
+  "fullFamilySize": 3,
+  "deterministic": true,
+  "rows": [
+    {
+      "removed": "HOT",
+      "fullFamilySize": 3,
+      "ablatedFamilySize": 2,
+      "verdict": "Không đổi kết luận: bỏ HOT không khiến chiến lược còn lại vượt alpha (familySize 3 -> 2).",
+      "anyNewlySignificant": false,
+      "deltas": [
+        {
+          "strategy": "COLD",
+          "validation": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 0.5648709520204189,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          },
+          "test": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 0.7390077829162978,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          }
+        },
+        {
+          "strategy": "BALANCED",
+          "validation": {
+            "originalAdjustedPValue": 0.2815636547374104,
+            "ablatedAdjustedPValue": 0.1877091031582736,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          },
+          "test": {
+            "originalAdjustedPValue": 0.9812157886242405,
+            "ablatedAdjustedPValue": 0.654143859082827,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          }
+        }
+      ]
+    },
+    {
+      "removed": "COLD",
+      "fullFamilySize": 3,
+      "ablatedFamilySize": 2,
+      "verdict": "Không đổi kết luận: bỏ COLD không khiến chiến lược còn lại vượt alpha (familySize 3 -> 2).",
+      "anyNewlySignificant": false,
+      "deltas": [
+        {
+          "strategy": "HOT",
+          "validation": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 0.9849415579250378,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          },
+          "test": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 0.666157038710811,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          }
+        },
+        {
+          "strategy": "BALANCED",
+          "validation": {
+            "originalAdjustedPValue": 0.2815636547374104,
+            "ablatedAdjustedPValue": 0.1877091031582736,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          },
+          "test": {
+            "originalAdjustedPValue": 0.9812157886242405,
+            "ablatedAdjustedPValue": 0.654143859082827,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          }
+        }
+      ]
+    },
+    {
+      "removed": "BALANCED",
+      "fullFamilySize": 3,
+      "ablatedFamilySize": 2,
+      "verdict": "Không đổi kết luận: bỏ BALANCED không khiến chiến lược còn lại vượt alpha (familySize 3 -> 2).",
+      "anyNewlySignificant": false,
+      "deltas": [
+        {
+          "strategy": "HOT",
+          "validation": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 1,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          },
+          "test": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 1,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          }
+        },
+        {
+          "strategy": "COLD",
+          "validation": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 1,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          },
+          "test": {
+            "originalAdjustedPValue": 1,
+            "ablatedAdjustedPValue": 1,
+            "originalSignificant": false,
+            "ablatedSignificant": false,
+            "newlySignificantAfterAblation": false
+          }
+        }
+      ]
+    }
+  ],
+  "honestNote": "Chẩn đoán độ nhạy của kích thước họ kiểm định Holm-Bonferroni (multiple-testing hygiene), KHÔNG PHẢI một phép đo lợi thế dự đoán (predictive edge). Edge/p-value riêng của mỗi chiến lược không đổi khi bỏ chiến lược khác (bằng chứng: deltaValidationEdge luôn = 0). Bảng dưới chỉ cho thấy: nếu bỏ một baseline khỏi họ kiểm định ĐÃ ĐĂNG KÝ TRƯỚC, các chiến lược còn lại có \"vượt alpha\" một cách giả tạo hay không — một cảnh báo về p-hacking hình thức (family size phải cố định trước khi nhìn dữ liệu), không phải một khuyến nghị chọn chiến lược."
+}

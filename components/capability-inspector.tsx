@@ -78,15 +78,15 @@ export function CapabilityInspector({
     },
     {
       id: "ablation",
-      title: "Ablation harness (đóng góp biên của từng chiến lược)",
-      status: "OPERATOR_GATED",
-      note: "CLI-only, chạy npm run research:ablation. Hiện chưa có báo cáo JSON công khai để hiển thị trên UI.",
+      title: "Ablation harness (độ nhạy kích thước họ Holm-Bonferroni)",
+      status: "READ_ONLY",
+      note: "Số liệu thật đã hiển thị ở panel \"Ablation & Portfolio Monte Carlo\" ngay bên dưới — không lặp lại ở đây. Tạo lại qua npm run research:ablation rồi npm run research:ablation-summary.",
     },
     {
       id: "portfolio-monte-carlo",
       title: "Portfolio Monte Carlo (chẩn đoán độ công bằng cho danh mục)",
-      status: "OPERATOR_GATED",
-      note: "CLI-only, chạy npm run research:portfolio-mc. Kết quả in ra console, chưa xuất JSON tĩnh để hiển thị trên tab Portfolio.",
+      status: "READ_ONLY",
+      note: "Số liệu thật đã hiển thị ở panel \"Ablation & Portfolio Monte Carlo\" ngay bên dưới — không lặp lại ở đây. Tạo lại qua npm run research:portfolio-mc rồi npm run research:portfolio-mc-summary.",
     },
     {
       id: "ranking-score",
@@ -124,12 +124,12 @@ export function CapabilityInspector({
   ];
 
   return (
-    <details className="analysis-card capability-inspector-card" open>
+    <details id="capability-inspector" className="analysis-card capability-inspector-card" open>
       <summary className="capability-inspector-summary">
         <Layers aria-hidden="true" />
         <span>
           <p className="eyebrow">Nâng cao</p>
-          <h2>Bản đồ năng lực hệ thống (Capability Inspector)</h2>
+          <h2 id="capability-inspector-heading">Bản đồ năng lực hệ thống (Capability Inspector)</h2>
         </span>
       </summary>
       <p className="method-note">

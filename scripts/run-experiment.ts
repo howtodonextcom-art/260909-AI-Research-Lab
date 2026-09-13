@@ -18,7 +18,10 @@ import { MEGA_645 } from "../lib/mega645";
 import {
   buildExperimentArtifactsFromReport,
   buildExperimentFamilySummary,
+  buildExperimentId,
+  buildLegacyExperimentId,
   countFamilyLooks,
+  findExperimentIdProtocolHashConflict,
   parseExperimentRegistry,
   primaryStrategyFamilyId,
   registerExperiment,
@@ -86,8 +89,12 @@ await mkdir(experimentsDir, { recursive: true });
 
 const strategies = CURRENT_PROTOCOL.strategies.filter((s) => s !== "RANDOM");
 const experimentIds = new Map<string, string>();
+const legacyExperimentIds = new Map<string, string>();
 for (const strategy of strategies) {
-  experimentIds.set(strategy, `${familyId}-${strategy.toLowerCase()}-${datasetHash.slice(0, 8)}`);
+  // §GAP-02 (Round 5): id now binds protocolHash, not just protocolVersion —
+  // see the doc comment on `buildExperimentId` in lib/research/experiments.ts.
+  experimentIds.set(strategy, buildExperimentId(familyId, strategy, datasetHash, protocolHash));
+  legacyExperimentIds.set(strategy, buildLegacyExperimentId(familyId, strategy, datasetHash));
 }
 
 /**
@@ -122,6 +129,33 @@ const latestDrawDate = snapshot.records.at(-1)?.date ?? null;
 
 for (const strategy of strategies) {
   const experimentId = experimentIds.get(strategy)!;
+  const legacyExperimentId = legacyExperimentIds.get(strategy)!;
+  // §GAP-02 (Round 5) backward-compat: this exact strategy+dataset already
+  // has a PRE-GAP-02 (hash-less id) registration — see
+  // `buildLegacyExperimentId`'s doc comment. Do not double-register just
+  // because the id CONSTRUCTION formula changed; the original registration
+  // (and its documented reports/provenance-exceptions.json entry, if any)
+  // remains the sole record for this strategy+dataset combination.
+  if (registryHasExperiment(existing, legacyExperimentId)) {
+    console.log(
+      `  Bỏ qua ${legacyExperimentId} (đã có trong registry theo scheme cũ — không đăng ký lại theo scheme mới "${experimentId}")`,
+    );
+    continue;
+  }
+  // §GAP-02 (Round 5): fail-closed guard against ambiguous reuse — should be
+  // structurally unreachable now that protocolHash is part of the id itself,
+  // but checked explicitly rather than merely assumed. Hard fail: no
+  // registry write, no artifact write.
+  const conflict = findExperimentIdProtocolHashConflict(existing, experimentId, protocolHash);
+  if (conflict) {
+    console.error(
+      `  TỪ CHỐI đăng ký "${experimentId}": registry đã có bản ghi với CÙNG experimentId nhưng protocolHash KHÁC ` +
+        `(đã ghi ${conflict.protocolHash.slice(0, 12)}…, đang tính ${protocolHash.slice(0, 12)}…) — ` +
+        "đây là xung đột định danh (identity collision), không phải một lần chạy lại bình thường. " +
+        "Không ghi registry, không ghi artifact.",
+    );
+    process.exit(1);
+  }
   if (registryHasExperiment(existing, experimentId)) {
     console.log(`  Bỏ qua ${experimentId} (đã có trong registry — artifact giữ nguyên, không ghi đè)`);
     continue;

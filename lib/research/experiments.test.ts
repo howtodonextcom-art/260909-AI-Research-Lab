@@ -9,9 +9,12 @@ import {
   FALLBACK_HOLM_FAMILY_SIZE,
   buildExperimentArtifactsFromReport,
   buildExperimentFamilySummary,
+  buildExperimentId,
+  buildLegacyExperimentId,
   countFamilyExperiments,
   countFamilyHypotheses,
   countFamilyLooks,
+  findExperimentIdProtocolHashConflict,
   parseExperimentFamilySummary,
   parseExperimentRegistry,
   primaryStrategyFamilyId,
@@ -19,6 +22,7 @@ import {
   registryHasExperiment,
   resolveHolmFamilySize,
   transitionExperiment,
+  type ExperimentRecord,
 } from "./experiments";
 import { classifyEvidence, type ProtocolLock } from "./protocol";
 
@@ -429,6 +433,109 @@ test("registerExperiment: predictions bị bỏ trống (không set) vẫn là m
   assert.equal(record.dataCutoffDrawId, undefined);
   const parsed = parseExperimentRegistry(JSON.stringify(record));
   assert.equal(parsed.length, 1);
+});
+
+// --- buildExperimentId / findExperimentIdProtocolHashConflict (§GAP-02, Round 5) ---
+
+test("buildExperimentId: cùng familyId/strategy/datasetHash nhưng protocolHash khác nhau -> id khác nhau (không còn va chạm định danh)", () => {
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  const datasetHash = "aaaaaaaa11112222"; // shared 16-char dataset hash for both
+  const idA = buildExperimentId(familyId, "HOT", datasetHash, "hash-aaaa-first");
+  const idB = buildExperimentId(familyId, "HOT", datasetHash, "hash-bbbb-second");
+  assert.notEqual(idA, idB);
+  // Both still carry the same familyId/strategy/datasetHash-prefix segment —
+  // only the trailing protocolHash-prefix segment differs.
+  const sharedPrefix = `${familyId}-hot-${datasetHash.slice(0, 8)}-`;
+  assert.ok(idA.startsWith(sharedPrefix));
+  assert.ok(idB.startsWith(sharedPrefix));
+  assert.equal(idA.slice(sharedPrefix.length), "hash-aaa");
+  assert.equal(idB.slice(sharedPrefix.length), "hash-bbb");
+});
+
+test("buildExperimentId: cùng protocolHash -> id ổn định, idempotent (re-run không đổi id)", () => {
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  const idA = buildExperimentId(familyId, "COLD", "aaaaaaaaZZZZ", "hashvalue00000000");
+  const idB = buildExperimentId(familyId, "COLD", "aaaaaaaaZZZZ", "hashvalue00000000");
+  assert.equal(idA, idB);
+});
+
+test("findExperimentIdProtocolHashConflict: id mới hoàn toàn -> không có xung đột", () => {
+  const records: ExperimentRecord[] = [];
+  assert.equal(findExperimentIdProtocolHashConflict(records, "exp-new", "hash-a"), null);
+});
+
+test("findExperimentIdProtocolHashConflict: id trùng và protocolHash trùng -> không có xung đột (re-run bình thường)", () => {
+  const records = [
+    {
+      experimentId: "exp-1",
+      hypothesisId: "HOT-vs-random",
+      familyId: "family-1",
+      strategyId: "HOT",
+      strategyVersion: "v1",
+      parameters: {},
+      seed: 1,
+      datasetHash: "d",
+      protocolVersion: "v1",
+      protocolHash: "hash-a",
+      registeredAt: "2026-09-12T00:00:00.000Z",
+      status: "COMPLETED",
+    } as ExperimentRecord,
+  ];
+  assert.equal(findExperimentIdProtocolHashConflict(records, "exp-1", "hash-a"), null);
+});
+
+test("findExperimentIdProtocolHashConflict: id trùng nhưng protocolHash KHÁC -> trả về bản ghi xung đột (xung đột định danh)", () => {
+  const conflicting: ExperimentRecord = {
+    experimentId: "exp-1",
+    hypothesisId: "HOT-vs-random",
+    familyId: "family-1",
+    strategyId: "HOT",
+    strategyVersion: "v1",
+    parameters: {},
+    seed: 1,
+    datasetHash: "d",
+    protocolVersion: "v1",
+    protocolHash: "hash-a",
+    registeredAt: "2026-09-12T00:00:00.000Z",
+    status: "COMPLETED",
+  };
+  const conflict = findExperimentIdProtocolHashConflict([conflicting], "exp-1", "hash-b-different");
+  assert.notEqual(conflict, null);
+  assert.equal(conflict?.protocolHash, "hash-a");
+  assert.equal(conflict?.experimentId, "exp-1");
+});
+
+test("buildLegacyExperimentId: khớp CHÍNH XÁC 3 id thật đã commit trong registry.jsonl (scheme cũ, không có hậu tố protocolHash)", () => {
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  const datasetHash = "8e26f348a8b241865facc7cfe690fbc428615b9b45ffc9732709a6267039c24e";
+  assert.equal(buildLegacyExperimentId(familyId, "HOT", datasetHash), "protocol-2026-09-10.1-primary-strategies-hot-8e26f348");
+  assert.equal(buildLegacyExperimentId(familyId, "COLD", datasetHash), "protocol-2026-09-10.1-primary-strategies-cold-8e26f348");
+  assert.equal(buildLegacyExperimentId(familyId, "BALANCED", datasetHash), "protocol-2026-09-10.1-primary-strategies-balanced-8e26f348");
+});
+
+test("scripts/run-experiment.ts vẫn no-op cho 3 chiến lược thật đã đăng ký: legacy id trùng registry thật, dù protocolHash hiện tại khác protocolHash lúc đăng ký", async () => {
+  // Regression guard for the exact real-world scenario Round 5 hit live: the
+  // registry's 3 real rows were registered under protocolHash 089e16b90b1d…
+  // but CURRENT_PROTOCOL now computes 9b864bec07e3… (documented protocol
+  // drift, reports/26-09-13-16-40-research-provenance-integrity.md). Naively
+  // checking only the new (hash-bound) experimentId would treat these as
+  // brand-new and double-register them. `buildLegacyExperimentId` must
+  // still match the real committed ids so run-experiment.ts's skip-check
+  // fires before any new-scheme registration is attempted.
+  const registryPath = fileURLToPath(new URL("../../reports/experiments/registry.jsonl", import.meta.url));
+  const text = await readFile(registryPath, "utf8");
+  const records = parseExperimentRegistry(text);
+  const familyId = primaryStrategyFamilyId("2026-09-10.1");
+  for (const record of records) {
+    const legacyId = buildLegacyExperimentId(familyId, record.strategyId, record.datasetHash);
+    assert.equal(legacyId, record.experimentId, `legacy id phải khớp experimentId thật đã commit: ${record.experimentId}`);
+    assert.equal(registryHasExperiment(records, legacyId), true);
+    // The NEW scheme id (bound to whatever protocolHash is live today) is
+    // deliberately a DIFFERENT string — proving the skip must be driven by
+    // the legacy check, not by registryHasExperiment on the new id.
+    const newSchemeIdWithCurrentHash = buildExperimentId(familyId, record.strategyId, record.datasetHash, "9b864bec07e355e042029cff3553716ba454e89b01d0860773ea47de772dfe52");
+    assert.notEqual(newSchemeIdWithCurrentHash, record.experimentId);
+  }
 });
 
 test("registry.jsonl thật (3 dòng đã commit) vẫn parse nguyên vẹn, không bị các trường mới ép buộc", async () => {

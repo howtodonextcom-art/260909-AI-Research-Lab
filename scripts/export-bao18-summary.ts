@@ -25,7 +25,14 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseBao18Summary, BAO18_RULE_IDS, type Bao18RuleId, type Bao18RuleRow, type Bao18Summary } from "../lib/research/bao18-summary";
+import {
+  parseBao18Summary,
+  BAO18_RULE_IDS,
+  type Bao18RuleId,
+  type Bao18RuleRow,
+  type Bao18StabilitySlice,
+  type Bao18Summary,
+} from "../lib/research/bao18-summary";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const reportsDir = path.join(projectRoot, "reports");
@@ -51,6 +58,23 @@ function num(value: unknown): number | null {
 
 function str(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+/**
+ * Defensive extraction of one EARLY/LATE stability slice (`row.early` /
+ * `row.late` in the raw audit report). Returns `null` (not just falsy) when
+ * absent or malformed — an older report predating this field is a normal,
+ * honest "not available" case, never a crash.
+ */
+function extractStabilitySlice(value: unknown): Bao18StabilitySlice | null {
+  if (!value || typeof value !== "object") return null;
+  const slice = value as Record<string, unknown>;
+  const n = num(slice.n);
+  const meanK = num(slice.meanK);
+  const hit6Count = num(slice.hit6Count);
+  const hit6Rate = num(slice.hit6Rate);
+  if (n === null || meanK === null || hit6Count === null || hit6Rate === null) return null;
+  return { n, meanK, hit6Count, hit6Rate };
 }
 
 /**
@@ -102,6 +126,8 @@ function extractRuleRow(rule: Bao18RuleId, perRuleRaw: unknown, verdictsByRuleRa
     hit5PlusRate,
     verdict,
     reasons,
+    early: extractStabilitySlice(row.early),
+    late: extractStabilitySlice(row.late),
   };
 }
 
@@ -184,6 +210,21 @@ function buildSummary(raw: Record<string, unknown>, sourceReportFile: string): B
   const finalVerdict = str(raw.finalVerdict) ?? "UNKNOWN";
   const scientificGrade = str(raw.scientificGrade) ?? "C — NO DEMONSTRATED EDGE";
 
+  // Round 4 renamed this field from `experimentSpecHash` to `scientificSpecHash`
+  // — accept either so reports generated just before/after the rename both export.
+  const scientificSpecHash = str(raw.scientificSpecHash) ?? str(raw.experimentSpecHash);
+
+  let buildProvenance: Bao18Summary["buildProvenance"] = null;
+  const buildProvenanceRaw = raw.buildProvenance;
+  if (buildProvenanceRaw && typeof buildProvenanceRaw === "object") {
+    const bp = buildProvenanceRaw as Record<string, unknown>;
+    const bpGeneratedAt = str(bp.generatedAt);
+    const gitHead = str(bp.gitHead);
+    if (bpGeneratedAt) {
+      buildProvenance = { generatedAt: bpGeneratedAt, gitHeadShort: gitHead ? gitHead.slice(0, 12) : null };
+    }
+  }
+
   return {
     schemaVersion: 1,
     generatedAt,
@@ -199,6 +240,8 @@ function buildSummary(raw: Record<string, unknown>, sourceReportFile: string): B
     nullCalibration,
     finalVerdict,
     scientificGrade,
+    scientificSpecHash,
+    buildProvenance,
   };
 }
 

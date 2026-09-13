@@ -21,6 +21,21 @@
 export const BAO18_RULE_IDS = ["RANDOM18", "HOT18", "COLD18", "OVERDUE18", "BALANCED18"] as const;
 export type Bao18RuleId = (typeof BAO18_RULE_IDS)[number];
 
+/**
+ * Half-of-history stability slice (EARLY = first half of evaluated draws,
+ * LATE = second half) for one rule — lets the UI show whether an apparent
+ * effect holds up over time or is an artifact of one period. `null` when the
+ * source report has no `early`/`late` breakdown for this rule (older report
+ * schema) so the panel can render an honest "not available" state instead of
+ * fabricating a split.
+ */
+export type Bao18StabilitySlice = {
+  n: number;
+  meanK: number;
+  hit6Count: number;
+  hit6Rate: number;
+};
+
 export type Bao18RuleRow = {
   rule: Bao18RuleId;
   /** True only for RANDOM18 — the empirical baseline, never itself given an edge verdict. */
@@ -37,6 +52,8 @@ export type Bao18RuleRow = {
   /** null for the RANDOM18 baseline row, which is not judged for "edge". */
   verdict: string | null;
   reasons: string[];
+  early: Bao18StabilitySlice | null;
+  late: Bao18StabilitySlice | null;
 };
 
 export type Bao18Summary = {
@@ -73,10 +90,35 @@ export type Bao18Summary = {
   } | null;
   finalVerdict: string;
   scientificGrade: string;
+  /**
+   * Content-addressed hash of the exact scientific spec (rules, lookback,
+   * seed, evaluation window, etc.) that produced this report — the
+   * reproducibility handle: re-run the audit CLI on the same dataset with
+   * the same spec and this hash must match. `null` for older reports
+   * generated before this field existed (renamed from `experimentSpecHash`
+   * in Round 4 of this project).
+   */
+  scientificSpecHash: string | null;
+  /** Compact build provenance for the report — deliberately NOT the full object (git status, runtime version, etc. stay CLI-only). */
+  buildProvenance: {
+    generatedAt: string;
+    /** Short (12-char) git commit hash the report was generated from, or null if unavailable. */
+    gitHeadShort: string | null;
+  } | null;
 };
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseStabilitySlice(value: unknown): Bao18StabilitySlice | null | undefined {
+  // undefined = malformed (caller should reject); null = legitimately absent.
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object") return undefined;
+  const slice = value as Record<string, unknown>;
+  if (!isFiniteNumber(slice.n) || !isFiniteNumber(slice.meanK)) return undefined;
+  if (!isFiniteNumber(slice.hit6Count) || !isFiniteNumber(slice.hit6Rate)) return undefined;
+  return { n: slice.n, meanK: slice.meanK, hit6Count: slice.hit6Count, hit6Rate: slice.hit6Rate };
 }
 
 function parseRuleRow(value: unknown): Bao18RuleRow | null {
@@ -92,6 +134,9 @@ function parseRuleRow(value: unknown): Bao18RuleRow | null {
   }
   if (row.verdict !== null && typeof row.verdict !== "string") return null;
   if (!Array.isArray(row.reasons) || !row.reasons.every((reason) => typeof reason === "string")) return null;
+  const early = parseStabilitySlice(row.early);
+  const late = parseStabilitySlice(row.late);
+  if (early === undefined || late === undefined) return null;
   return {
     rule: row.rule as Bao18RuleId,
     isBaseline: Boolean(row.isBaseline),
@@ -106,6 +151,8 @@ function parseRuleRow(value: unknown): Bao18RuleRow | null {
     hit5PlusRate: row.hit5PlusRate,
     verdict: row.verdict as string | null,
     reasons: row.reasons as string[],
+    early,
+    late,
   };
 }
 
@@ -202,6 +249,20 @@ export function parseBao18Summary(value: unknown): Bao18Summary | null {
   if (typeof raw.finalVerdict !== "string") return null;
   if (typeof raw.scientificGrade !== "string") return null;
 
+  if (raw.scientificSpecHash !== null && typeof raw.scientificSpecHash !== "undefined" && typeof raw.scientificSpecHash !== "string") {
+    return null;
+  }
+  const scientificSpecHash = (raw.scientificSpecHash as string | null | undefined) ?? null;
+
+  let buildProvenance: Bao18Summary["buildProvenance"] = null;
+  if (raw.buildProvenance !== null && typeof raw.buildProvenance !== "undefined") {
+    if (typeof raw.buildProvenance !== "object") return null;
+    const bp = raw.buildProvenance as Record<string, unknown>;
+    if (typeof bp.generatedAt !== "string") return null;
+    if (bp.gitHeadShort !== null && typeof bp.gitHeadShort !== "string") return null;
+    buildProvenance = { generatedAt: bp.generatedAt, gitHeadShort: (bp.gitHeadShort as string | null) ?? null };
+  }
+
   return {
     schemaVersion: 1,
     generatedAt: raw.generatedAt,
@@ -218,5 +279,7 @@ export function parseBao18Summary(value: unknown): Bao18Summary | null {
     nullCalibration,
     finalVerdict: raw.finalVerdict,
     scientificGrade: raw.scientificGrade,
+    scientificSpecHash,
+    buildProvenance,
   };
 }

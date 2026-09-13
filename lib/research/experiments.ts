@@ -190,6 +190,106 @@ export function primaryStrategyFamilyId(protocolVersion: string): string {
   return `protocol-${protocolVersion}-primary-strategies`;
 }
 
+/**
+ * Experiment id construction for NEW registrations (Round 5 / GAP-02).
+ *
+ * Round 4's provenance audit (`reports/26-09-13-16-40-research-provenance-integrity.md`,
+ * "Protocol identity") found that `CURRENT_PROTOCOL`'s content had changed at
+ * some point WITHOUT its `version` string being bumped — two genuinely
+ * different protocols shared one version label, indistinguishable from that
+ * label alone. The OLD experimentId scheme
+ * (`${familyId}-${strategy.toLowerCase()}-${datasetHash.slice(0, 8)}`, where
+ * `familyId` embeds only `protocolVersion`) never encoded the actual
+ * `protocolHash` — so two experiments registered under the same version
+ * label but genuinely different protocol content could collide into the
+ * same id with no way to detect it from the id alone. Concretely, this is
+ * why the 3 real rows `protocol-2026-09-10.1-primary-strategies-{hot,cold,balanced}-8e26f348`
+ * needed a documented `reports/provenance-exceptions.json` entry instead of
+ * a clean pass.
+ *
+ * Fix: a NEW experimentId also encodes an 8-char `protocolHash` prefix, so
+ * two genuinely different protocols (even under an unbumped version string)
+ * can never produce the same id.
+ *
+ * `familyId` itself (see `primaryStrategyFamilyId` above) is DELIBERATELY
+ * UNCHANGED by this fix — it governs Holm family membership (which
+ * hypotheses share one multiple-testing correction), a purely statistical
+ * grouping concept unrelated to per-experiment identity collision. Folding
+ * `protocolHash` into `familyId` too would silently change historical Holm
+ * family sizes/look counts every time the protocol hash changes under a
+ * stable version string, which `resolveHolmFamilySize`/`countFamilyLooks`
+ * are explicitly designed to keep stable except when a genuinely new
+ * hypothesis or look is added (see their own doc comments). The
+ * experimentId is the right — and sufficient — place to bind identity: it
+ * is the actual registry/artifact-file key `verify-provenance.ts` and
+ * `checkArtifactFileIntegrity` reason about.
+ *
+ * The 3 pre-existing registry rows above predate this scheme and are NEVER
+ * rewritten (append-only) — `parseExperimentRegistry` has no opinion on
+ * which scheme produced an id, so old- and new-scheme ids parse identically.
+ * Only `scripts/run-experiment.ts`'s construction of NEW ids changes.
+ */
+export function buildExperimentId(familyId: string, strategy: string, datasetHash: string, protocolHash: string): string {
+  return `${familyId}-${strategy.toLowerCase()}-${datasetHash.slice(0, 8)}-${protocolHash.slice(0, 8)}`;
+}
+
+/**
+ * The PRE-GAP-02 id scheme (no protocolHash suffix) — kept only so
+ * `scripts/run-experiment.ts` can detect "this exact strategy+dataset
+ * combination already has an old-scheme registry entry" and skip
+ * re-registering it, rather than double-registering under the new scheme.
+ *
+ * Why this is needed: the live registry's 3 real rows
+ * (`protocol-2026-09-10.1-primary-strategies-{hot,cold,balanced}-8e26f348`)
+ * were registered when `CURRENT_PROTOCOL`'s live hash was
+ * `089e16b90b1d…`. Since then (per the Round 4 provenance audit), the
+ * protocol's actual content drifted to hash `9b864bec07e3…` WITHOUT the
+ * version string changing — so today, `buildExperimentId` for the same
+ * strategy+dataset now computes a DIFFERENT id (because it now includes the
+ * CURRENT hash `9b864bec…`, not the original `089e16b90b1d…` the old row
+ * was registered under). Naively checking only the new-scheme id would
+ * therefore treat these 3 already-registered strategies as brand new and
+ * register duplicate rows purely because the id CONSTRUCTION formula
+ * changed — not because anything new is actually being measured that
+ * wasn't already covered by the original registration + its documented
+ * `reports/provenance-exceptions.json` entry.
+ *
+ * This function exists ONLY for that one-time backward-compatibility check.
+ * It is never used to construct a NEW id — only to recognize an OLD one.
+ */
+export function buildLegacyExperimentId(familyId: string, strategy: string, datasetHash: string): string {
+  return `${familyId}-${strategy.toLowerCase()}-${datasetHash.slice(0, 8)}`;
+}
+
+/**
+ * Fail-closed guard for the ambiguous-reuse scenario `buildExperimentId` is
+ * designed to make unreachable: a NEW registration whose computed
+ * experimentId matches an EXISTING registry entry, but the two disagree on
+ * `protocolHash`. Under the OLD scheme this was silently possible (see the
+ * comment above `buildExperimentId`); under the new scheme it should be
+ * structurally impossible, since `protocolHash` is now literally part of the
+ * id — but "structurally hard to reach" is not the same as "explicitly
+ * guarded," so `scripts/run-experiment.ts` calls this before every
+ * registration and hard-fails (no registry write, no artifact write) on a
+ * non-null result.
+ *
+ * Returns `null` for the ordinary, expected cases: no existing entry with
+ * this id (a genuinely new registration), or an existing entry that agrees
+ * on `protocolHash` (an idempotent re-run — `registryHasExperiment` already
+ * causes the caller to skip re-registering that one). Returns the
+ * conflicting existing record only when the same id was claimed under a
+ * different `protocolHash`.
+ */
+export function findExperimentIdProtocolHashConflict(
+  records: ExperimentRecord[],
+  experimentId: string,
+  protocolHash: string,
+): ExperimentRecord | null {
+  const existing = records.find((record) => record.experimentId === experimentId);
+  if (!existing) return null;
+  return existing.protocolHash !== protocolHash ? existing : null;
+}
+
 /** Visible non-RANDOM protocol set size — only used when the registry family is empty. */
 export const FALLBACK_HOLM_FAMILY_SIZE = 3;
 

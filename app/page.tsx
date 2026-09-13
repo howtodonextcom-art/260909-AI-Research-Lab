@@ -11,6 +11,7 @@ import { ExperimentScorecard } from "@/components/experiment-scorecard";
 import { ScientificVerdict } from "@/components/scientific-verdict";
 import { Bao18Panel } from "@/components/bao18-panel";
 import { CapabilityInspector } from "@/components/capability-inspector";
+import { DiagnosticsPanel } from "@/components/diagnostics-panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -246,6 +247,8 @@ function ResearchLab({ draws, dataState }: { draws: DrawRecord[]; dataState: Dra
         <Bao18Panel />
 
         <CapabilityInspector protocolLock={protocolLock} familySummary={familySummary} />
+
+        <DiagnosticsPanel />
 
         <DataExplorer draws={draws} />
 

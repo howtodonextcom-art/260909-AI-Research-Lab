@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-13T10:15:32.871Z",
+  "rows": [
+    {
+      "ticketCount": 10,
+      "simulationCount": 3000,
+      "seed": 645,
+      "portfolioSeed": 645,
+      "projectiveMeanBestMatch": 2.0603333333333333,
+      "randomMeanBestMatch": 2.0946666666666665,
+      "meanBestMatchDelta": -0.034333333333333105,
+      "projectiveHitAtLeast4Rate": 0.017666666666666667,
+      "randomHitAtLeast4Rate": 0.019,
+      "projectiveHitAtLeast5Rate": 0.0006666666666666666,
+      "randomHitAtLeast5Rate": 0.0003333333333333333
+    },
+    {
+      "ticketCount": 20,
+      "simulationCount": 3000,
+      "seed": 645,
+      "portfolioSeed": 645,
+      "projectiveMeanBestMatch": 2.376333333333333,
+      "randomMeanBestMatch": 2.3813333333333335,
+      "meanBestMatchDelta": -0.0050000000000003375,
+      "projectiveHitAtLeast4Rate": 0.028666666666666667,
+      "randomHitAtLeast4Rate": 0.027333333333333334,
+      "projectiveHitAtLeast5Rate": 0.0006666666666666666,
+      "randomHitAtLeast5Rate": 0.0006666666666666666
+    },
+    {
+      "ticketCount": 30,
+      "simulationCount": 3000,
+      "seed": 645,
+      "portfolioSeed": 645,
+      "projectiveMeanBestMatch": 2.590333333333333,
+      "randomMeanBestMatch": 2.538666666666667,
+      "meanBestMatchDelta": 0.051666666666666305,
+      "projectiveHitAtLeast4Rate": 0.034666666666666665,
+      "randomHitAtLeast4Rate": 0.044333333333333336,
+      "projectiveHitAtLeast5Rate": 0.0003333333333333333,
+      "randomHitAtLeast5Rate": 0.0013333333333333333
+    }
+  ],
+  "honestNote": "Chẩn đoán độ công bằng / độ phủ danh mục (Monte Carlo trên giả lập kỳ quay CÔNG BẰNG tổng hợp), KHÔNG PHẢI chỉ báo dự đoán và KHÔNG dùng dữ liệu kỳ quay thật. So sánh danh mục projective (cặp số ≤1 lần) với n vé ngẫu nhiên độc lập cùng ngân sách vé. Chênh lệch số trùng khớp tốt nhất trung bình thường nhỏ và không nhất quán theo n — đây là bằng chứng về độ phủ cặp số, không phải một lợi thế thắng cược."
+}

@@ -123,6 +123,10 @@ export function ScientificVerdict({ protocolLock }: { protocolLock: ProtocolLock
           <span>Đang tải kết luận kiểm định Bao-18…</span>
         </p>
       )}
+
+      <a className="scientific-verdict-capability-link" href="#capability-inspector">
+        Xem đầy đủ năng lực hệ thống (kể cả các phần chỉ chạy qua CLI) ↓
+      </a>
     </section>
   );
 }
